@@ -1,3 +1,87 @@
+type CanvasAnimationContext =
+  | CanvasRenderingContext2D
+  | OffscreenCanvasRenderingContext2D;
+
+class CanvasAnimation {
+  private ctx: CanvasAnimationContext;
+  private canvas: { width: number; height: number };
+  private mouse = { x: 0, y: 0 };
+  private radius = 80;
+  private framerate = 0;
+  private prevTime = 0;
+
+  private isOffscreen: boolean;
+  private isPressed = false;
+
+  constructor(ctx: CanvasAnimationContext, width: number, height: number) {
+    this.ctx = ctx;
+    this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
+    this.canvas = { width, height };
+  }
+
+  drawCircle(x: number, y: number, r: number, color = "blue") {
+    this.ctx.save();
+    this.ctx.fillStyle = color;
+    this.ctx.beginPath();
+    this.ctx.ellipse(x, y, r, r, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.closePath();
+    this.ctx.restore();
+  }
+
+  render(timestamp: number) {
+    // update the current framerate of the animation
+    const dTime = timestamp - this.prevTime;
+    const prevDec = (this.prevTime / 1000).toString().split(".")[1] ?? 0;
+    const currDec = (timestamp / 1000).toString().split(".")[1] ?? 0;
+    this.prevTime = timestamp;
+
+    if (currDec < prevDec) {
+      const nextFramerate = Math.floor(1000 / dTime);
+      this.framerate = nextFramerate > 0 ? nextFramerate : 0;
+    }
+
+    // render shape
+    this.radius = this.canvas.width / 8;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.isPressed) {
+      this.drawCircle(this.mouse.x, this.mouse.y, this.radius);
+    } else {
+      this.drawCircle(
+        this.canvas.width / 2,
+        this.canvas.height / 2,
+        this.radius
+      );
+    }
+
+    // render debug text
+    const fontSize =
+      this.ctx instanceof OffscreenCanvasRenderingContext2D ? 32 : 16;
+    const posX =
+      this.ctx instanceof OffscreenCanvasRenderingContext2D ? 20 : 10;
+    this.ctx.font = `${fontSize}px sans-serif`;
+    this.ctx.fillStyle = "black";
+    this.ctx.textBaseline = "middle";
+    this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, posX, fontSize);
+    this.ctx.fillText(`Framerate: ${this.framerate}`, posX, fontSize * 2.5);
+  }
+
+  public setMouse(x: number, y: number) {
+    this.mouse = { x, y };
+  }
+
+  public resize(width: number, height: number) {
+    this.canvas.width = width;
+    this.canvas.height = height;
+  }
+
+  public setPressed(isPressed: boolean) {
+    this.isPressed = isPressed;
+  }
+}
+
+export default CanvasAnimation;
+
 let size = 80;
 let angle = 0;
 let radius = 40;

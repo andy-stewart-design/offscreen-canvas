@@ -1,22 +1,16 @@
-import { render } from "./render";
+import CanvasAnimation from "./render";
 import { sendToWorker } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
 import "./main.css";
-
-interface Vec2 {
-  x: number;
-  y: number;
-}
 
 class OffscreenCanvasRenderer {
   private canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private useOffscreenCanvas: boolean;
+  private animation: CanvasAnimation | null = null;
 
   private dpr: number;
   private rafId = 0;
-  private isPressed = false;
-  private mouse: Vec2 = { x: 0, y: 0 };
 
   private resizeObserver: ResizeObserver;
   private boundHandlePressStart: () => void;
@@ -53,6 +47,11 @@ class OffscreenCanvasRenderer {
       const ctx = this.canvasEl.getContext("2d");
       if (!ctx) throw new Error("Could not get 2d context in html canvas");
       this.ctx = ctx;
+      this.animation = new CanvasAnimation(
+        this.ctx,
+        window.innerWidth,
+        window.innerHeight
+      );
 
       this.render(0);
     }
@@ -73,7 +72,7 @@ class OffscreenCanvasRenderer {
         isPressed: true,
       });
     } else {
-      this.isPressed = true;
+      this.animation?.setPressed(true);
     }
   }
 
@@ -84,7 +83,7 @@ class OffscreenCanvasRenderer {
         isPressed: false,
       });
     } else {
-      this.isPressed = false;
+      this.animation?.setPressed(false);
     }
   }
 
@@ -97,7 +96,7 @@ class OffscreenCanvasRenderer {
         y: y * this.dpr,
       });
     } else {
-      this.mouse = { x, y };
+      this.animation?.setMouse(x, y);
     }
   }
 
@@ -108,7 +107,7 @@ class OffscreenCanvasRenderer {
         isPressed: false,
       });
     } else {
-      this.isPressed = false;
+      this.animation?.setPressed(false);
     }
   }
 
@@ -125,6 +124,10 @@ class OffscreenCanvasRenderer {
       } else {
         cancelAnimationFrame(this.rafId);
         this.init(entry.contentRect.width, entry.contentRect.height);
+        this.animation?.resize(
+          entry.contentRect.width,
+          entry.contentRect.height
+        );
         this.render(0);
       }
     });
@@ -154,23 +157,15 @@ class OffscreenCanvasRenderer {
   }
 
   private render(timestamp: number) {
-    if (!this.ctx) return;
-    const width = this.canvasEl.width / this.dpr;
-    const height = this.canvasEl.height / this.dpr;
-    render(
-      this.ctx,
-      width,
-      height,
-      this.mouse.x,
-      this.mouse.y,
-      this.isPressed,
-      timestamp
-    );
+    if (!this.animation) return;
+    this.animation.render(timestamp);
     this.rafId = requestAnimationFrame((t) => this.render(t));
   }
 
   public appendTo(node: Element) {
+    const { width, height } = node.getBoundingClientRect();
     node.appendChild(this.canvasEl);
+    this.animation?.resize(width, height);
   }
 
   public destroy() {
