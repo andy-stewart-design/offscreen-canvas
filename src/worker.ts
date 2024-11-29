@@ -11,8 +11,6 @@ class OffscreenCanvasRenderer {
   private rafId = 0;
 
   public init({ canvas }: OffscreenCanvasInit) {
-    console.log("initing offscreen canvas");
-
     this.canvas = canvas;
 
     const offscreenCTX = this.canvas.getContext("2d");
@@ -26,15 +24,20 @@ class OffscreenCanvasRenderer {
       this.canvas.width,
       this.canvas.height
     );
+
     this.render(0);
   }
 
   public onMouseMove(vec: { x: number; y: number }) {
-    this.animation?.setMouse(vec.x, vec.y);
+    this.animation?.set("mouse", vec.x, vec.y);
   }
 
-  public onPress(nextPress: boolean) {
-    this.animation?.setPressed(nextPress);
+  public onPress(isPressed: boolean) {
+    this.animation?.set("pressed", isPressed);
+  }
+
+  public onWheel(deltaX: number, deltaY: number) {
+    this.animation?.panCamera(-deltaX, -deltaY);
   }
 
   public resize(width: number, height: number) {
@@ -43,7 +46,7 @@ class OffscreenCanvasRenderer {
     cancelAnimationFrame(this.rafId);
     this.canvas.width = width;
     this.canvas.height = height;
-    this.animation?.resize(width, height);
+    this.animation?.set("size", width, height);
 
     this.render(0);
   }
@@ -69,6 +72,8 @@ function handleOffscreenCanvasMessage({ data }: OffscreenCanvasMessageEvent) {
     renderer.onMouseMove(data);
   } else if (data.type === "pressStart" || data.type === "pressEnd") {
     renderer.onPress(data.isPressed);
+  } else if (data.type === "wheel") {
+    renderer.onWheel(data.deltaX, data.deltaY);
   } else if (data.type === "resize") {
     renderer.resize(data.width, data.height);
   }

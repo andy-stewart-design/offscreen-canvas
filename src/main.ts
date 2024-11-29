@@ -3,7 +3,7 @@ import { sendToWorker } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
 import "./main.css";
 
-class OffscreenCanvasRenderer {
+class HTMLCanvasRenderer {
   private canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private useOffscreenCanvas: boolean;
@@ -17,6 +17,7 @@ class OffscreenCanvasRenderer {
   private boundHandleMove: (e: MouseEvent | TouchEvent) => void;
   private boundHandlePressEnd: () => void;
   private boundHandleMouseOut: () => void;
+  private boundHandleWheel: (e: WheelEvent) => void;
 
   constructor() {
     this.useOffscreenCanvas = typeof window.OffscreenCanvas === "function";
@@ -30,6 +31,7 @@ class OffscreenCanvasRenderer {
     this.boundHandleMove = this.handleMove.bind(this);
     this.boundHandlePressEnd = this.handlePressEnd.bind(this);
     this.boundHandleMouseOut = this.handleMouseOut.bind(this);
+    this.boundHandleWheel = this.handleWheel.bind(this);
     this.addEventListeners();
 
     if (this.useOffscreenCanvas) {
@@ -72,7 +74,7 @@ class OffscreenCanvasRenderer {
         isPressed: true,
       });
     } else {
-      this.animation?.setPressed(true);
+      this.animation?.set("pressed", true);
     }
   }
 
@@ -83,12 +85,13 @@ class OffscreenCanvasRenderer {
         isPressed: false,
       });
     } else {
-      this.animation?.setPressed(false);
+      this.animation?.set("pressed", false);
     }
   }
 
   private handleMove(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
+    console.log("setting mouse");
     if (this.useOffscreenCanvas) {
       sendToWorker({
         type: "mouseMove",
@@ -96,7 +99,7 @@ class OffscreenCanvasRenderer {
         y: y * this.dpr,
       });
     } else {
-      this.animation?.setMouse(x, y);
+      this.animation?.set("mouse", x, y);
     }
   }
 
@@ -107,27 +110,37 @@ class OffscreenCanvasRenderer {
         isPressed: false,
       });
     } else {
-      this.animation?.setPressed(false);
+      this.animation?.set("pressed", false);
+    }
+  }
+
+  private handleWheel(e: WheelEvent) {
+    e.preventDefault();
+    if (this.useOffscreenCanvas) {
+      sendToWorker({
+        type: "wheel",
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+      });
+    } else {
+      this.animation?.panCamera(-e.deltaX, -e.deltaY);
     }
   }
 
   private createResizeObserver() {
     const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
+      const { width, height } = entries[0].contentRect;
 
       if (this.useOffscreenCanvas) {
         sendToWorker({
           type: "resize",
-          width: entry.contentRect.width * this.dpr,
-          height: entry.contentRect.height * this.dpr,
+          width: width * this.dpr,
+          height: height * this.dpr,
         });
       } else {
         cancelAnimationFrame(this.rafId);
-        this.init(entry.contentRect.width, entry.contentRect.height);
-        this.animation?.resize(
-          entry.contentRect.width,
-          entry.contentRect.height
-        );
+        this.init(width, height);
+        this.animation?.set("size", width, height);
         this.render(0);
       }
     });
@@ -144,6 +157,7 @@ class OffscreenCanvasRenderer {
     this.canvasEl.addEventListener("touchstart", this.boundHandlePressStart);
     this.canvasEl.addEventListener("touchmove", this.boundHandleMove);
     this.canvasEl.addEventListener("touchend", this.boundHandlePressEnd);
+    this.canvasEl.addEventListener("wheel", this.boundHandleWheel);
   }
 
   private removeEventListeners() {
@@ -154,6 +168,7 @@ class OffscreenCanvasRenderer {
     this.canvasEl.removeEventListener("touchstart", this.boundHandlePressStart);
     this.canvasEl.removeEventListener("touchmove", this.boundHandleMove);
     this.canvasEl.removeEventListener("touchend", this.boundHandlePressEnd);
+    this.canvasEl.removeEventListener("wheel", this.boundHandleWheel);
   }
 
   private render(timestamp: number) {
@@ -165,7 +180,7 @@ class OffscreenCanvasRenderer {
   public appendTo(node: Element) {
     const { width, height } = node.getBoundingClientRect();
     node.appendChild(this.canvasEl);
-    this.animation?.resize(width, height);
+    this.animation?.set("size", width, height);
   }
 
   public destroy() {
@@ -177,5 +192,5 @@ class OffscreenCanvasRenderer {
 
 const app = document.querySelector("#root");
 if (!app) throw new Error("Could not find root element.");
-const occanvas = new OffscreenCanvasRenderer();
+const occanvas = new HTMLCanvasRenderer();
 occanvas.appendTo(app);

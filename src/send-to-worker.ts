@@ -16,6 +16,12 @@ interface OffscreenCanvasPressEvent {
   isPressed: boolean;
 }
 
+interface OffscreenCanvasWheelEvent {
+  type: "wheel";
+  deltaX: number;
+  deltaY: number;
+}
+
 interface OffscreenCanvasResizeEvent {
   type: "resize";
   width: number;
@@ -26,6 +32,7 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasInit
   | OffscreenCanvasMoveEvent
   | OffscreenCanvasPressEvent
+  | OffscreenCanvasWheelEvent
   | OffscreenCanvasResizeEvent;
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
 
