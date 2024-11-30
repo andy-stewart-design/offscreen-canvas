@@ -8,10 +8,11 @@ class CanvasAnimation {
   private ctx: CanvasAnimationContext;
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
   private canvas: Box;
-  private viewport: Box;
+  private viewport = { width: 0, height: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
   private velocity: Vec2 = { x: 0, y: 0 };
   private radius = 80;
+  private dpr: number;
   private framerate = 0;
   private prevTime = 0;
 
@@ -24,28 +25,27 @@ class CanvasAnimation {
     fontSize: 16,
   };
 
-  constructor(ctx: CanvasAnimationContext, width: number, height: number) {
+  constructor(
+    ctx: CanvasAnimationContext,
+    width: number,
+    height: number,
+    dpr: number
+  ) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
-    this.debugConfig.fontSize = this.isOffscreen ? 32 : 16;
-    this.debugConfig.pos.x = this.isOffscreen ? 20 : 10;
+    this.debugConfig.fontSize = this.isOffscreen ? 16 * dpr : 16;
+    this.debugConfig.pos.x = this.isOffscreen ? 10 * dpr : 10;
     this.debugConfig.pos.y = this.debugConfig.fontSize;
+    this.dpr = dpr;
     this.canvas = {
       minX: 0,
       minY: 0,
-      maxX: width,
-      maxY: height,
-      width,
-      height,
+      maxX: width * 2,
+      maxY: height * 2,
+      width: width * 2,
+      height: height * 2,
     };
-    this.viewport = {
-      minX: 0,
-      minY: 0,
-      maxX: width,
-      maxY: height,
-      width,
-      height,
-    };
+    this.viewport = { height, width };
   }
 
   private drawCircle(x: number, y: number, r: number, color = "blue") {
@@ -73,31 +73,39 @@ class CanvasAnimation {
     // render debug panel
     const { show, fontSize, pos } = this.debugConfig;
     if (show) {
+      const camera = this.getScaledCamera();
+      const mouse = this.getScaledMouse();
+      const viewport = this.getScaledViewport();
       this.ctx.font = `${fontSize}px sans-serif`;
       this.ctx.fillStyle = "black";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
       this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
       this.ctx.fillText(
-        `Camera: ${this.camera.x.toFixed(2)}, ${this.camera.y.toFixed(2)}`,
+        `Camera: ${camera.x.toFixed(2)}, ${camera.y.toFixed(2)}`,
         pos.x,
         pos.y * 4
       );
       this.ctx.fillText(
-        `Mouse: ${(this.mouse?.current.x || 0).toFixed(2)}, ${(
-          this.mouse?.current.y || 0
-        ).toFixed(2)}`,
+        `Viewport: ${viewport.minX.toFixed(1)}, ${viewport.minY.toFixed(
+          1
+        )}, ${viewport.maxX.toFixed(1)}, ${viewport.maxY.toFixed(1)}`,
         pos.x,
         pos.y * 5.5
+      );
+      this.ctx.fillText(
+        `Mouse: ${mouse.x.toFixed(2)}, ${mouse.y.toFixed(2)}`,
+        pos.x,
+        pos.y * 7
       );
       this.ctx.fillText(
         `Velocity: ${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(
           2
         )}`,
         pos.x,
-        pos.y * 7
+        pos.y * 8.5
       );
-      this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 8.5);
+      this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 10);
     }
   }
 
@@ -116,7 +124,50 @@ class CanvasAnimation {
     }
   }
 
-  public panCamera(dx: number, dy: number) {
+  private screenToCanvas(point: Vec2) {
+    const camera = this.getScaledCamera();
+    return {
+      x: point.x / camera.z - camera.x,
+      y: point.y / camera.z - camera.y,
+    };
+  }
+
+  private getScaledCamera() {
+    return {
+      x: this.isOffscreen ? this.camera.x / this.dpr : this.camera.x,
+      y: this.isOffscreen ? this.camera.y / this.dpr : this.camera.y,
+      z: this.camera.z,
+    };
+  }
+
+  private getScaledMouse() {
+    const mouseX = this.mouse?.current.x || 0;
+    const mouseY = this.mouse?.current.y || 0;
+    return {
+      x: this.isOffscreen ? mouseX / this.dpr : mouseX,
+      y: this.isOffscreen ? mouseY / this.dpr : mouseY,
+    };
+  }
+
+  private getScaledViewport(): Box {
+    const camera = this.getScaledCamera();
+    const width = this.isOffscreen
+      ? this.viewport.width / this.dpr
+      : this.viewport.width;
+    const height = this.isOffscreen
+      ? this.viewport.height / this.dpr
+      : this.viewport.height;
+    return {
+      minX: -camera.x,
+      minY: -camera.y,
+      maxX: -camera.x + width,
+      maxY: -camera.y + height,
+      width,
+      height,
+    };
+  }
+
+  private panCamera(dx: number, dy: number) {
     this.camera = {
       x: this.camera.x - dx / this.camera.z,
       y: this.camera.y - dy / this.camera.z,
@@ -144,50 +195,58 @@ class CanvasAnimation {
     this.drawDebugPanel(timestamp);
   }
 
-  public set(key: "mouse", x: number, y: number): void;
-  public set(key: "size", width: number, height: number): void;
-  public set(key: "pressed", isPressed: boolean): void;
-  public set(
-    key: "mouse" | "size" | "pressed",
-    ...values: [number, number] | [boolean]
-  ): void {
-    if (key === "mouse") {
-      const [x, y] = values as [number, number];
+  public onMove(x: number, y: number) {
+    const scaledX = this.isOffscreen ? x * this.dpr : x;
+    const scaledY = this.isOffscreen ? y * this.dpr : y;
 
-      if (!this.mouse) {
-        this.mouse = {
-          previous: { x, y },
-          current: { x, y },
-        };
-      } else {
-        const { x: prevX, y: prevY } = this.mouse.current;
-        this.mouse = {
-          previous: { x: prevX, y: prevY },
-          current: { x, y },
-        };
-      }
-
-      if (this.isPressed) {
-        this.velocity = {
-          x: this.mouse.previous.x - this.mouse.current.x,
-          y: this.mouse.previous.y - this.mouse.current.y,
-        };
-        this.panCamera(this.velocity.x, this.velocity.y);
-      }
-      //   this.mouse = { x, y };
-    } else if (key === "size") {
-      const [width, height] = values as [number, number];
-      this.canvas = {
-        ...this.canvas,
-        maxX: width,
-        maxY: height,
-        width,
-        height,
+    if (!this.mouse) {
+      this.mouse = {
+        previous: { x: scaledX, y: scaledY },
+        current: { x: scaledX, y: scaledY },
       };
-    } else if (key === "pressed") {
-      const [isPressed] = values as [boolean];
-      this.isPressed = isPressed;
+    } else {
+      const { x: prevX, y: prevY } = this.mouse.current;
+      this.mouse = {
+        previous: { x: prevX, y: prevY },
+        current: { x: scaledX, y: scaledY },
+      };
     }
+
+    if (this.isPressed) {
+      this.velocity = {
+        x: this.mouse.previous.x - this.mouse.current.x,
+        y: this.mouse.previous.y - this.mouse.current.y,
+      };
+      this.panCamera(this.velocity.x, this.velocity.y);
+    }
+  }
+
+  public onPress(isPressed: boolean) {
+    if (isPressed) this.velocity = { x: 0, y: 0 };
+    this.isPressed = isPressed;
+  }
+
+  public onClick(x: number, y: number) {
+    console.log(this.screenToCanvas({ x, y }));
+    console.log(this.screenToCanvas({ x, y }).x > this.canvas.width / this.dpr);
+  }
+
+  public onWheel(deltaX: number, deltaY: number) {
+    this.panCamera(
+      this.isOffscreen ? -deltaX : -deltaX / this.dpr,
+      this.isOffscreen ? -deltaY : -deltaY / this.dpr
+    );
+  }
+
+  public onResize(width: number, height: number) {
+    this.canvas = {
+      ...this.canvas,
+      maxX: width * 2,
+      maxY: height * 2,
+      width: width * 2,
+      height: height * 2,
+    };
+    this.viewport = { width, height };
   }
 }
 

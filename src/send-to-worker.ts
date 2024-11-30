@@ -3,6 +3,7 @@ import OffscreenCanvasWorker from "./worker?worker";
 interface OffscreenCanvasInit {
   type: "init";
   canvas: OffscreenCanvas;
+  dpr: number;
 }
 
 interface OffscreenCanvasMoveEvent {
@@ -14,6 +15,12 @@ interface OffscreenCanvasMoveEvent {
 interface OffscreenCanvasPressEvent {
   type: "pressStart" | "pressEnd";
   isPressed: boolean;
+}
+
+interface OffscreenCanvasClickEvent {
+  type: "click";
+  x: number;
+  y: number;
 }
 
 interface OffscreenCanvasWheelEvent {
@@ -32,6 +39,7 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasInit
   | OffscreenCanvasMoveEvent
   | OffscreenCanvasPressEvent
+  | OffscreenCanvasClickEvent
   | OffscreenCanvasWheelEvent
   | OffscreenCanvasResizeEvent;
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
@@ -40,8 +48,8 @@ const worker = new OffscreenCanvasWorker();
 
 function sendToWorker(msg: OffscreenCanvasMessage) {
   if (msg.type === "init") {
-    const { type, canvas } = msg;
-    worker.postMessage({ type, canvas }, [canvas]);
+    const { canvas, ...props } = msg;
+    worker.postMessage({ ...props, canvas }, [canvas]);
   } else {
     worker.postMessage(msg);
   }
