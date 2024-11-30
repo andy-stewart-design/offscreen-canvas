@@ -35,13 +35,25 @@ interface OffscreenCanvasResizeEvent {
   height: number;
 }
 
+interface OffscreenCanvasResizeEvent {
+  type: "resize";
+  width: number;
+  height: number;
+}
+
+interface OffscreenCanvasImageEvent {
+  type: "image";
+  image: ImageBitmap | HTMLImageElement;
+}
+
 type OffscreenCanvasMessage =
   | OffscreenCanvasInit
   | OffscreenCanvasMoveEvent
   | OffscreenCanvasPressEvent
   | OffscreenCanvasClickEvent
   | OffscreenCanvasWheelEvent
-  | OffscreenCanvasResizeEvent;
+  | OffscreenCanvasResizeEvent
+  | OffscreenCanvasImageEvent;
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
 
 const worker = new OffscreenCanvasWorker();

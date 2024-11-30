@@ -9,9 +9,15 @@ class CanvasAnimation {
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
   private canvas: Box;
   private viewport = { width: 0, height: 0 };
+  private grid = { rows: 3, cols: 3 };
+  private cell = { width: 0, height: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
   private velocity: Vec2 = { x: 0, y: 0 };
-  private radius = 80;
+  private activeCell = { index: 0, col: 0, row: 0 };
+  private hoveredCell = { index: 0, col: 0, row: 0 };
+
+  private image: ImageBitmap | HTMLImageElement | null = null;
+
   private dpr: number;
   private framerate = 0;
   private prevTime = 0;
@@ -37,25 +43,16 @@ class CanvasAnimation {
     this.debugConfig.pos.x = this.isOffscreen ? 10 * dpr : 10;
     this.debugConfig.pos.y = this.debugConfig.fontSize;
     this.dpr = dpr;
+    this.viewport = { height, width };
+    this.cell = { width: width / 3, height: height / 3 };
     this.canvas = {
       minX: 0,
       minY: 0,
-      maxX: width * 2,
-      maxY: height * 2,
-      width: width * 2,
-      height: height * 2,
+      maxX: width * this.grid.cols,
+      maxY: height * this.grid.rows,
+      width: width * this.grid.cols,
+      height: height * this.grid.rows,
     };
-    this.viewport = { height, width };
-  }
-
-  private drawCircle(x: number, y: number, r: number, color = "blue") {
-    this.ctx.save();
-    this.ctx.fillStyle = color;
-    this.ctx.beginPath();
-    this.ctx.ellipse(x, y, r, r, 0, 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.closePath();
-    this.ctx.restore();
   }
 
   private drawDebugPanel(timestamp: number) {
@@ -106,6 +103,16 @@ class CanvasAnimation {
         pos.y * 8.5
       );
       this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 10);
+      this.ctx.fillText(
+        `Active Cell: ${this.activeCell.index}, ${this.activeCell.col}, ${this.activeCell.row}`,
+        pos.x,
+        pos.y * 11.5
+      );
+      this.ctx.fillText(
+        `Hovered Cell: ${this.hoveredCell.index}, ${this.hoveredCell.col}, ${this.hoveredCell.row}`,
+        pos.x,
+        pos.y * 13
+      );
     }
   }
 
@@ -175,21 +182,48 @@ class CanvasAnimation {
     };
   }
 
+  private getCellIndexFromPoint(x: number, y: number) {
+    const rel = this.screenToCanvas({ x, y });
+    const scale = this.isOffscreen ? this.dpr : 1;
+    const col = Math.floor((rel.x / this.cell.width) * scale) % this.grid.cols;
+    const row = Math.floor((rel.y / this.cell.height) * scale) % this.grid.rows;
+    const nCol = col >= 0 ? col : this.grid.cols + col;
+    const nRow = row >= 0 ? row : this.grid.rows + row;
+    return {
+      index: nCol + nRow * this.grid.cols,
+      col: nCol,
+      row: nRow,
+    };
+  }
+
   public render(timestamp: number) {
-    this.radius = this.canvas.width / 8;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.animateVelocity();
 
     this.ctx.save();
     this.ctx.translate(this.camera.x, this.camera.y);
-    this.ctx.fillStyle = "lightblue";
-    this.ctx.fillRect(
-      this.canvas.minX,
-      this.canvas.minY,
-      this.canvas.width,
-      this.canvas.height
-    );
-    this.drawCircle(this.canvas.width / 2, this.canvas.height / 2, this.radius);
+    this.ctx.fillStyle = "lightcoral";
+    this.ctx.lineWidth = this.isOffscreen ? this.dpr : 1;
+    this.ctx.strokeStyle = "white";
+
+    for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
+      const rowIndex = i % this.grid.cols;
+      const colIndex = Math.floor(i / this.grid.cols);
+      const { width, height } = this.cell;
+      this.ctx.beginPath();
+      this.ctx.rect(rowIndex * width, colIndex * height, width, height);
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.closePath();
+    }
+
+    if (this.image)
+      this.ctx.drawImage(
+        this.image,
+        this.cell.width / 2 - this.image.width / 2,
+        this.cell.height / 2 - this.image.height / 2
+      );
+
     this.ctx.restore();
 
     this.drawDebugPanel(timestamp);
@@ -219,6 +253,8 @@ class CanvasAnimation {
       };
       this.panCamera(this.velocity.x, this.velocity.y);
     }
+
+    this.hoveredCell = this.getCellIndexFromPoint(x, y);
   }
 
   public onPress(isPressed: boolean) {
@@ -227,8 +263,7 @@ class CanvasAnimation {
   }
 
   public onClick(x: number, y: number) {
-    console.log(this.screenToCanvas({ x, y }));
-    console.log(this.screenToCanvas({ x, y }).x > this.canvas.width / this.dpr);
+    this.activeCell = this.getCellIndexFromPoint(x, y);
   }
 
   public onWheel(deltaX: number, deltaY: number) {
@@ -239,14 +274,19 @@ class CanvasAnimation {
   }
 
   public onResize(width: number, height: number) {
+    this.cell = { width: width / 3, height: height / 3 };
     this.canvas = {
       ...this.canvas,
-      maxX: width * 2,
-      maxY: height * 2,
-      width: width * 2,
-      height: height * 2,
+      maxX: this.cell.width * this.grid.cols,
+      maxY: this.cell.height * this.grid.rows,
+      width: this.cell.width * this.grid.cols,
+      height: this.cell.height * this.grid.rows,
     };
     this.viewport = { width, height };
+  }
+
+  public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
+    this.image = bitmap;
   }
 }
 
