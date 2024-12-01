@@ -15,6 +15,8 @@ interface OffscreenCanvasMoveEvent {
 interface OffscreenCanvasPressEvent {
   type: "pressStart" | "pressEnd";
   isPressed: boolean;
+  x?: number;
+  y?: number;
 }
 
 interface OffscreenCanvasClickEvent {

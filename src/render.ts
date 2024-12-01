@@ -12,13 +12,13 @@ class CanvasAnimation {
   private grid = { rows: 3, cols: 3 };
   private cell = { width: 0, height: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
+
+  private pressStartPoint: Vec2 = { x: 0, y: 0 };
   private velocity: Vec2 = { x: 0, y: 0 };
   private activeCell = { index: 0, col: 0, row: 0 };
   private hoveredCell = { index: 0, col: 0, row: 0 };
-
   private image: ImageBitmap | HTMLImageElement | null = null;
 
-  private dpr: number;
   private framerate = 0;
   private prevTime = 0;
 
@@ -27,24 +27,18 @@ class CanvasAnimation {
 
   private debugConfig = {
     show: true,
-    pos: { x: 10, y: 10 },
+    pos: { x: 10, y: 16 },
     fontSize: 16,
   };
 
-  constructor(
-    ctx: CanvasAnimationContext,
-    width: number,
-    height: number,
-    dpr: number
-  ) {
+  constructor(ctx: CanvasAnimationContext, width: number, height: number) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
-    this.debugConfig.fontSize = this.isOffscreen ? 16 * dpr : 16;
-    this.debugConfig.pos.x = this.isOffscreen ? 10 * dpr : 10;
-    this.debugConfig.pos.y = this.debugConfig.fontSize;
-    this.dpr = dpr;
     this.viewport = { height, width };
-    this.cell = { width: width / 3, height: height / 3 };
+    this.cell = {
+      width: this.viewport.width / 3,
+      height: this.viewport.height / 3,
+    };
     this.canvas = {
       minX: 0,
       minY: 0,
@@ -70,16 +64,14 @@ class CanvasAnimation {
     // render debug panel
     const { show, fontSize, pos } = this.debugConfig;
     if (show) {
-      const camera = this.getScaledCamera();
-      const mouse = this.getScaledMouse();
-      const viewport = this.getScaledViewport();
+      const viewport = this.getViewportBounds();
       this.ctx.font = `${fontSize}px sans-serif`;
       this.ctx.fillStyle = "black";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
       this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
       this.ctx.fillText(
-        `Camera: ${camera.x.toFixed(2)}, ${camera.y.toFixed(2)}`,
+        `Camera: ${this.camera.x.toFixed(2)}, ${this.camera.y.toFixed(2)}`,
         pos.x,
         pos.y * 4
       );
@@ -91,7 +83,9 @@ class CanvasAnimation {
         pos.y * 5.5
       );
       this.ctx.fillText(
-        `Mouse: ${mouse.x.toFixed(2)}, ${mouse.y.toFixed(2)}`,
+        `Mouse: ${this.mouse?.current.x.toFixed(
+          2
+        )}, ${this.mouse?.current.y.toFixed(2)}`,
         pos.x,
         pos.y * 7
       );
@@ -132,45 +126,20 @@ class CanvasAnimation {
   }
 
   private screenToCanvas(point: Vec2) {
-    const camera = this.getScaledCamera();
     return {
-      x: point.x / camera.z - camera.x,
-      y: point.y / camera.z - camera.y,
+      x: point.x / this.camera.z - this.camera.x,
+      y: point.y / this.camera.z - this.camera.y,
     };
   }
 
-  private getScaledCamera() {
+  private getViewportBounds(): Box {
     return {
-      x: this.isOffscreen ? this.camera.x / this.dpr : this.camera.x,
-      y: this.isOffscreen ? this.camera.y / this.dpr : this.camera.y,
-      z: this.camera.z,
-    };
-  }
-
-  private getScaledMouse() {
-    const mouseX = this.mouse?.current.x || 0;
-    const mouseY = this.mouse?.current.y || 0;
-    return {
-      x: this.isOffscreen ? mouseX / this.dpr : mouseX,
-      y: this.isOffscreen ? mouseY / this.dpr : mouseY,
-    };
-  }
-
-  private getScaledViewport(): Box {
-    const camera = this.getScaledCamera();
-    const width = this.isOffscreen
-      ? this.viewport.width / this.dpr
-      : this.viewport.width;
-    const height = this.isOffscreen
-      ? this.viewport.height / this.dpr
-      : this.viewport.height;
-    return {
-      minX: -camera.x,
-      minY: -camera.y,
-      maxX: -camera.x + width,
-      maxY: -camera.y + height,
-      width,
-      height,
+      minX: -this.camera.x,
+      minY: -this.camera.y,
+      maxX: -this.camera.x + this.viewport.width,
+      maxY: -this.camera.y + this.viewport.height,
+      width: this.viewport.width,
+      height: this.viewport.height,
     };
   }
 
@@ -183,10 +152,9 @@ class CanvasAnimation {
   }
 
   private getCellIndexFromPoint(x: number, y: number) {
-    const rel = this.screenToCanvas({ x, y });
-    const scale = this.isOffscreen ? this.dpr : 1;
-    const col = Math.floor((rel.x / this.cell.width) * scale) % this.grid.cols;
-    const row = Math.floor((rel.y / this.cell.height) * scale) % this.grid.rows;
+    const canvasPoint = this.screenToCanvas({ x, y });
+    const col = Math.floor(canvasPoint.x / this.cell.width) % this.grid.cols;
+    const row = Math.floor(canvasPoint.y / this.cell.height) % this.grid.rows;
     const nCol = col >= 0 ? col : this.grid.cols + col;
     const nRow = row >= 0 ? row : this.grid.rows + row;
     return {
@@ -202,27 +170,35 @@ class CanvasAnimation {
 
     this.ctx.save();
     this.ctx.translate(this.camera.x, this.camera.y);
-    this.ctx.fillStyle = "lightcoral";
-    this.ctx.lineWidth = this.isOffscreen ? this.dpr : 1;
-    this.ctx.strokeStyle = "white";
 
     for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
       const rowIndex = i % this.grid.cols;
       const colIndex = Math.floor(i / this.grid.cols);
       const { width, height } = this.cell;
+      this.ctx.fillStyle = "lightcoral";
+      this.ctx.strokeStyle = "white";
       this.ctx.beginPath();
       this.ctx.rect(rowIndex * width, colIndex * height, width, height);
       this.ctx.fill();
       this.ctx.stroke();
       this.ctx.closePath();
+
+      this.ctx.textAlign = "center";
+      this.ctx.fillStyle = "white";
+      this.ctx.fillText(
+        i.toString(),
+        rowIndex * width + this.cell.width / 2,
+        colIndex * height + this.cell.width / 2
+      );
     }
 
-    if (this.image)
-      this.ctx.drawImage(
-        this.image,
-        this.cell.width / 2 - this.image.width / 2,
-        this.cell.height / 2 - this.image.height / 2
-      );
+    // if (this.image) {
+    //   this.ctx.drawImage(
+    //     this.image,
+    //     this.cell.width / 2 - this.image.width / 2,
+    //     this.cell.height / 2 - this.image.height / 2
+    //   );
+    // }
 
     this.ctx.restore();
 
@@ -230,19 +206,16 @@ class CanvasAnimation {
   }
 
   public onMove(x: number, y: number) {
-    const scaledX = this.isOffscreen ? x * this.dpr : x;
-    const scaledY = this.isOffscreen ? y * this.dpr : y;
-
     if (!this.mouse) {
       this.mouse = {
-        previous: { x: scaledX, y: scaledY },
-        current: { x: scaledX, y: scaledY },
+        previous: { x, y },
+        current: { x, y },
       };
     } else {
       const { x: prevX, y: prevY } = this.mouse.current;
       this.mouse = {
         previous: { x: prevX, y: prevY },
-        current: { x: scaledX, y: scaledY },
+        current: { x, y },
       };
     }
 
@@ -257,20 +230,32 @@ class CanvasAnimation {
     this.hoveredCell = this.getCellIndexFromPoint(x, y);
   }
 
-  public onPress(isPressed: boolean) {
-    if (isPressed) this.velocity = { x: 0, y: 0 };
+  public onPress(
+    isPressed: boolean,
+    x: number | undefined = undefined,
+    y: number | undefined = undefined
+  ) {
     this.isPressed = isPressed;
+
+    if (isPressed) {
+      this.velocity = { x: 0, y: 0 };
+      if (x !== undefined && y !== undefined) {
+        this.pressStartPoint = { x, y };
+      }
+    } else if (x !== undefined && y !== undefined) {
+      if (Math.abs(this.pressStartPoint.x - x) < 10) {
+        this.velocity = { x: 0, y: 0 };
+      }
+    }
   }
 
   public onClick(x: number, y: number) {
+    if (Math.abs(this.pressStartPoint.x - x) > 10) return;
     this.activeCell = this.getCellIndexFromPoint(x, y);
   }
 
   public onWheel(deltaX: number, deltaY: number) {
-    this.panCamera(
-      this.isOffscreen ? -deltaX : -deltaX / this.dpr,
-      this.isOffscreen ? -deltaY : -deltaY / this.dpr
-    );
+    this.panCamera(-deltaX, -deltaY);
   }
 
   public onResize(width: number, height: number) {

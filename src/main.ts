@@ -1,29 +1,29 @@
 import CanvasAnimation from "./render";
 import { sendToWorker } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
-import "./main.css";
 import { getDpr } from "./utils/device-pixel-ratio";
+import "./main.css";
 
 class HTMLCanvasRenderer {
   private canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
-  private useOffscreenCanvas: boolean;
+  private isOffscreen: boolean;
   private animation: CanvasAnimation | null = null;
 
   private dpr: number;
   private rafId = 0;
 
   private resizeObserver: ResizeObserver;
-  private boundHandlePressStart: () => void;
+  private boundHandlePressStart: (e: MouseEvent | TouchEvent) => void;
   private boundHandleMove: (e: MouseEvent | TouchEvent) => void;
-  private boundHandlePressEnd: () => void;
+  private boundHandlePressEnd: (e: MouseEvent | TouchEvent) => void;
   private boundHandleClick: (e: MouseEvent | TouchEvent) => void;
   private boundHandleMouseOut: () => void;
   private boundHandleWheel: (e: WheelEvent) => void;
 
   constructor(defaultWidth: number, defaultHeight: number) {
-    this.useOffscreenCanvas = typeof window.OffscreenCanvas === "function";
-    // this.useOffscreenCanvas = false;
+    this.isOffscreen = typeof window.OffscreenCanvas === "function";
+    // this.isOffscreen = false;
     this.canvasEl = document.createElement("canvas");
     this.dpr = getDpr();
     this.init(defaultWidth, defaultHeight);
@@ -37,7 +37,7 @@ class HTMLCanvasRenderer {
     this.boundHandleWheel = this.handleWheel.bind(this);
     this.addEventListeners();
 
-    if (this.useOffscreenCanvas) {
+    if (this.isOffscreen) {
       this.ctx = null;
       const offscreen = this.canvasEl.transferControlToOffscreen();
       sendToWorker({
@@ -52,8 +52,7 @@ class HTMLCanvasRenderer {
       this.animation = new CanvasAnimation(
         this.ctx,
         defaultWidth,
-        defaultHeight,
-        this.dpr
+        defaultHeight
       );
 
       this.render(0);
@@ -61,38 +60,45 @@ class HTMLCanvasRenderer {
   }
 
   private init(width: number, height: number) {
-    this.canvasEl.width = width * this.dpr;
-    this.canvasEl.height = height * this.dpr;
+    const scale = this.isOffscreen ? 1 : this.dpr;
+    this.canvasEl.width = width * scale;
+    this.canvasEl.height = height * scale;
     this.canvasEl.style.width = `100%`;
     this.canvasEl.style.height = `100%`;
-    this.ctx?.scale(this.dpr, this.dpr);
+    if (!this.isOffscreen && this.ctx) this.ctx.scale(scale, scale);
   }
 
-  private handlePressStart() {
-    if (this.useOffscreenCanvas) {
+  private handlePressStart(e: MouseEvent | TouchEvent) {
+    const { x, y } = getPressPoint(e);
+    if (this.isOffscreen) {
       sendToWorker({
         type: "pressStart",
         isPressed: true,
+        x,
+        y,
       });
     } else {
-      this.animation?.onPress(true);
+      this.animation?.onPress(true, x, y);
     }
   }
 
-  private handlePressEnd() {
-    if (this.useOffscreenCanvas) {
+  private handlePressEnd(e: MouseEvent | TouchEvent) {
+    const { x, y } = getPressPoint(e);
+    if (this.isOffscreen) {
       sendToWorker({
         type: "pressEnd",
         isPressed: false,
+        x,
+        y,
       });
     } else {
-      this.animation?.onPress(false);
+      this.animation?.onPress(false, x, y);
     }
   }
 
   private handleClick(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
-    if (this.useOffscreenCanvas) {
+    if (this.isOffscreen) {
       sendToWorker({ type: "click", x, y });
       const image = new Image();
       image.crossOrigin = "anonymous";
@@ -114,7 +120,7 @@ class HTMLCanvasRenderer {
 
   private handleMove(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
-    if (this.useOffscreenCanvas) {
+    if (this.isOffscreen) {
       sendToWorker({ type: "mouseMove", x, y });
     } else {
       this.animation?.onMove(x, y);
@@ -122,7 +128,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleMouseOut() {
-    if (this.useOffscreenCanvas) {
+    if (this.isOffscreen) {
       sendToWorker({
         type: "pressEnd",
         isPressed: false,
@@ -134,7 +140,7 @@ class HTMLCanvasRenderer {
 
   private handleWheel(e: WheelEvent) {
     e.preventDefault();
-    if (this.useOffscreenCanvas) {
+    if (this.isOffscreen) {
       sendToWorker({
         type: "wheel",
         deltaX: e.deltaX,
@@ -149,11 +155,11 @@ class HTMLCanvasRenderer {
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
 
-      if (this.useOffscreenCanvas) {
+      if (this.isOffscreen) {
         sendToWorker({
           type: "resize",
-          width: width * this.dpr,
-          height: height * this.dpr,
+          width: width,
+          height: height,
         });
       } else {
         cancelAnimationFrame(this.rafId);
