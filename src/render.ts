@@ -180,6 +180,16 @@ class CanvasAnimation {
       const rowIndex = i % this.grid.cols;
       const colIndex = Math.floor(i / this.grid.cols);
       const { width, height } = this.cell;
+
+      //  MARK: Virtualize rendering ---------------------------------------------
+      const cellMinX = this.camera.x + rowIndex * width;
+      const cellMinY = this.camera.y + colIndex * height;
+      const cellMaxX = cellMinX + width;
+      const cellMaxY = cellMinY + height;
+      const isVisibleX = cellMaxX >= 0 && cellMinX <= this.viewport.width;
+      const isVisibleY = cellMaxY >= 0 && cellMinY <= this.viewport.height;
+      if (!isVisibleX || !isVisibleY) continue;
+
       this.ctx.fillStyle = "lightcoral";
       this.ctx.strokeStyle = "white";
       this.ctx.beginPath();
