@@ -9,7 +9,7 @@ class CanvasAnimation {
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
   private canvas: Box;
   private viewport: Box;
-  private grid = { rows: 3, cols: 3 };
+  private grid = { rows: 6, cols: 6 };
   private cell = { width: 0, height: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
 
@@ -71,8 +71,11 @@ class CanvasAnimation {
     // render debug panel
     const { show, fontSize, pos } = this.debugConfig;
     if (show) {
-      this.ctx.font = `${fontSize}px sans-serif`;
-      this.ctx.fillStyle = "black";
+      this.ctx.save();
+      this.ctx.font = `300 ${fontSize}px system-ui`;
+      this.ctx.fillStyle = "rgb(0 0 0 / 0.75)";
+      this.ctx.fillRect(0, 0, 312, 232);
+      this.ctx.fillStyle = "#efefef";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
       this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
@@ -115,6 +118,7 @@ class CanvasAnimation {
         pos.x,
         pos.y * 13
       );
+      this.ctx.restore;
     }
   }
 
@@ -190,8 +194,8 @@ class CanvasAnimation {
       const isVisibleY = cellMaxY >= 0 && cellMinY <= this.viewport.height;
       if (!isVisibleX || !isVisibleY) continue;
 
-      this.ctx.fillStyle = "lightcoral";
-      this.ctx.strokeStyle = "white";
+      this.ctx.fillStyle = "#1a1a1a";
+      this.ctx.strokeStyle = "#3a3a3a";
       this.ctx.beginPath();
       this.ctx.rect(rowIndex * width, colIndex * height, width, height);
       this.ctx.fill();
