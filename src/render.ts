@@ -8,7 +8,7 @@ class CanvasAnimation {
   private ctx: CanvasAnimationContext;
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
   private canvas: Box;
-  private viewport = { width: 0, height: 0 };
+  private viewport: Box;
   private grid = { rows: 3, cols: 3 };
   private cell = { width: 0, height: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
@@ -34,7 +34,14 @@ class CanvasAnimation {
   constructor(ctx: CanvasAnimationContext, width: number, height: number) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
-    this.viewport = { height, width };
+    this.viewport = {
+      minX: -this.camera.x,
+      minY: -this.camera.y,
+      maxX: -this.camera.x + width,
+      maxY: -this.camera.y + height,
+      width: width,
+      height: height,
+    };
     this.cell = {
       width: this.viewport.width / 3,
       height: this.viewport.height / 3,
@@ -64,7 +71,6 @@ class CanvasAnimation {
     // render debug panel
     const { show, fontSize, pos } = this.debugConfig;
     if (show) {
-      const viewport = this.getViewportBounds();
       this.ctx.font = `${fontSize}px sans-serif`;
       this.ctx.fillStyle = "black";
       this.ctx.textBaseline = "middle";
@@ -76,9 +82,11 @@ class CanvasAnimation {
         pos.y * 4
       );
       this.ctx.fillText(
-        `Viewport: ${viewport.minX.toFixed(1)}, ${viewport.minY.toFixed(
+        `Viewport: ${this.viewport.minX.toFixed(
           1
-        )}, ${viewport.maxX.toFixed(1)}, ${viewport.maxY.toFixed(1)}`,
+        )}, ${this.viewport.minY.toFixed(1)}, ${this.viewport.maxX.toFixed(
+          1
+        )}, ${this.viewport.maxY.toFixed(1)}`,
         pos.x,
         pos.y * 5.5
       );
@@ -132,22 +140,19 @@ class CanvasAnimation {
     };
   }
 
-  private getViewportBounds(): Box {
-    return {
+  private panCamera(dx: number, dy: number) {
+    this.camera = {
+      x: this.camera.x - dx / this.camera.z,
+      y: this.camera.y - dy / this.camera.z,
+      z: this.camera.z,
+    };
+    this.viewport = {
       minX: -this.camera.x,
       minY: -this.camera.y,
       maxX: -this.camera.x + this.viewport.width,
       maxY: -this.camera.y + this.viewport.height,
       width: this.viewport.width,
       height: this.viewport.height,
-    };
-  }
-
-  private panCamera(dx: number, dy: number) {
-    this.camera = {
-      x: this.camera.x - dx / this.camera.z,
-      y: this.camera.y - dy / this.camera.z,
-      z: this.camera.z,
     };
   }
 
@@ -188,7 +193,7 @@ class CanvasAnimation {
       this.ctx.fillText(
         i.toString(),
         rowIndex * width + this.cell.width / 2,
-        colIndex * height + this.cell.width / 2
+        colIndex * height + this.cell.height / 2
       );
     }
 
@@ -267,7 +272,14 @@ class CanvasAnimation {
       width: this.cell.width * this.grid.cols,
       height: this.cell.height * this.grid.rows,
     };
-    this.viewport = { width, height };
+    this.viewport = {
+      minX: -this.camera.x,
+      minY: -this.camera.y,
+      maxX: -this.camera.x + width,
+      maxY: -this.camera.y + height,
+      width: width,
+      height: height,
+    };
   }
 
   public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
