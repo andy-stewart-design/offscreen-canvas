@@ -16,8 +16,8 @@ class CanvasAnimation {
 
   private pressStartPoint: Vec2 = { x: 0, y: 0 };
   private velocity: Vec2 = { x: 0, y: 0 };
-  private activeCell = { index: 0, col: 0, row: 0 };
-  private hoveredCell = { index: 0, col: 0, row: 0 };
+  private activeCell: number | null = null;
+  private hoveredCell: number | null = null;
   private images: Array<GridItem> | null = null;
 
   private framerate = 0;
@@ -69,44 +69,34 @@ class CanvasAnimation {
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
       this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
       this.ctx.fillText(
-        `Camera: ${this.camera.x.toFixed(2)}, ${this.camera.y.toFixed(2)}`,
+        `Camera: ${this.camera.x.toFixed(2)}, 
+        ${this.camera.y.toFixed(2)}`,
         pos.x,
         pos.y * 4
       );
       this.ctx.fillText(
-        `Viewport: ${this.viewport.minX.toFixed(
-          1
-        )}, ${this.viewport.minY.toFixed(1)}, ${this.viewport.maxX.toFixed(
-          1
-        )}, ${this.viewport.maxY.toFixed(1)}`,
+        `Viewport: ${this.viewport.minX.toFixed(1)}, 
+        ${this.viewport.minY.toFixed(1)},
+        ${this.viewport.maxX.toFixed(1)}, 
+        ${this.viewport.maxY.toFixed(1)}`,
         pos.x,
         pos.y * 5.5
       );
       this.ctx.fillText(
-        `Mouse: ${this.mouse?.current.x.toFixed(
-          2
-        )}, ${this.mouse?.current.y.toFixed(2)}`,
+        `Mouse: ${this.mouse?.current.x.toFixed(2)}, 
+        ${this.mouse?.current.y.toFixed(2)}`,
         pos.x,
         pos.y * 7
       );
       this.ctx.fillText(
-        `Velocity: ${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(
-          2
-        )}`,
+        `Velocity: ${this.velocity.x.toFixed(2)}, 
+        ${this.velocity.y.toFixed(2)}`,
         pos.x,
         pos.y * 8.5
       );
       this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 10);
-      this.ctx.fillText(
-        `Active Cell: ${this.activeCell.index}, ${this.activeCell.col}, ${this.activeCell.row}`,
-        pos.x,
-        pos.y * 11.5
-      );
-      this.ctx.fillText(
-        `Hovered Cell: ${this.hoveredCell.index}, ${this.hoveredCell.col}, ${this.hoveredCell.row}`,
-        pos.x,
-        pos.y * 13
-      );
+      this.ctx.fillText(`Active Cell: ${this.activeCell}`, pos.x, pos.y * 11.5);
+      this.ctx.fillText(`Hovered Cell: ${this.hoveredCell}`, pos.x, pos.y * 13);
       this.ctx.restore;
     }
   }
@@ -128,8 +118,8 @@ class CanvasAnimation {
 
   private screenToCanvas(point: Vec2) {
     return {
-      x: point.x / this.camera.z - this.camera.x,
-      y: point.y / this.camera.z - this.camera.y,
+      x: (point.x / this.camera.z - this.camera.x) % this.canvas.width,
+      y: (point.y / this.camera.z - this.camera.y) % this.canvas.height,
     };
   }
 
@@ -336,14 +326,15 @@ class CanvasAnimation {
         this.ctx.ellipse(
           rowIndex * width + shiftX + this.cell.innerPadding,
           colIndex * height + shiftY + this.cell.innerPadding,
-          20,
-          20,
+          16,
+          16,
           0,
           0,
           Math.PI * 2
         );
         this.ctx.fill();
         this.ctx.closePath();
+        this.ctx.font = `300 13px system-ui`;
         this.ctx.textAlign = "center";
         this.ctx.fillStyle = "white";
         this.ctx.fillText(
@@ -379,9 +370,28 @@ class CanvasAnimation {
         y: this.mouse.previous.y - this.mouse.current.y,
       };
       this.panCamera(this.velocity.x, this.velocity.y);
+
+      if (
+        Math.abs(this.pressStartPoint.x - x) > 20 ||
+        Math.abs(this.pressStartPoint.y - y) > 20
+      ) {
+        this.activeCell = null;
+      }
     }
 
-    this.hoveredCell = this.getCellIndexFromPoint(x, y);
+    const hoveredCell = this.getCellIndexFromPoint(x, y);
+    const canvasMousePoint = this.screenToCanvas({ x, y });
+    const posX = hoveredCell.col * this.cell.width;
+    const posY = hoveredCell.row * this.cell.height;
+    const isHoveredX =
+      canvasMousePoint.x > posX + this.cell.outerPadding &&
+      canvasMousePoint.x < posX + (this.cell.width - this.cell.outerPadding);
+    const isHoveredY =
+      canvasMousePoint.y > posY + this.cell.outerPadding &&
+      canvasMousePoint.y < posY + (this.cell.height - this.cell.outerPadding);
+
+    if (isHoveredX && isHoveredY) this.hoveredCell = hoveredCell.index;
+    else if (this.hoveredCell !== null) this.hoveredCell = null;
   }
 
   public onPress(
@@ -404,8 +414,26 @@ class CanvasAnimation {
   }
 
   public onClick(x: number, y: number) {
-    if (Math.abs(this.pressStartPoint.x - x) > 10) return;
-    this.activeCell = this.getCellIndexFromPoint(x, y);
+    if (
+      Math.abs(this.pressStartPoint.x - x) > 10 ||
+      Math.abs(this.pressStartPoint.y - y) > 10
+    ) {
+      return;
+    }
+
+    const hoveredCell = this.getCellIndexFromPoint(x, y);
+    const canvasMousePoint = this.screenToCanvas({ x, y });
+    const posX = hoveredCell.col * this.cell.width;
+    const posY = hoveredCell.row * this.cell.height;
+    const isHoveredX =
+      canvasMousePoint.x > posX + this.cell.outerPadding &&
+      canvasMousePoint.x < posX + (this.cell.width - this.cell.outerPadding);
+    const isHoveredY =
+      canvasMousePoint.y > posY + this.cell.outerPadding &&
+      canvasMousePoint.y < posY + (this.cell.height - this.cell.outerPadding);
+
+    if (isHoveredX && isHoveredY) this.activeCell = hoveredCell.index;
+    else if (this.activeCell !== null) this.activeCell = null;
   }
 
   public onWheel(deltaX: number, deltaY: number) {
