@@ -16,6 +16,18 @@ interface Box {
   height: number;
 }
 
-type GridImage = ImageBitmap | HTMLImageElement | null;
+interface GridItemSource {
+  type: "product" | "influencer";
+  title: string;
+  src: string;
+}
 
-export type { Vec2, Vec3, Box, GridImage };
+type GridImage = ImageBitmap | HTMLImageElement;
+
+interface GridItem {
+  type: "product" | "influencer";
+  title: string;
+  element: GridImage;
+}
+
+export type { Vec2, Vec3, Box, GridImage, GridItem, GridItemSource };

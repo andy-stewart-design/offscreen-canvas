@@ -3,7 +3,7 @@ import type {
   OffscreenCanvasInit,
   OffscreenCanvasMessageEvent,
 } from "./send-to-worker";
-import type { GridImage, Vec2 } from "./types";
+import type { GridItem, Vec2 } from "./types";
 
 class OffscreenCanvasRenderer {
   private canvas: OffscreenCanvas | null = null;
@@ -49,7 +49,7 @@ class OffscreenCanvasRenderer {
     this.animation?.onWheel(deltaX, deltaY);
   }
 
-  public onImageLoaded(images: Array<GridImage>) {
+  public onImageLoaded(images: Array<GridItem>) {
     this.animation?.onImagesLoaded(images);
   }
 

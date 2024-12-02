@@ -1,5 +1,5 @@
 import { getGridDimensions } from "./utils/grid-dimensions";
-import type { Box, GridImage, Vec2, Vec3 } from "./types";
+import type { Box, GridItem, Vec2, Vec3 } from "./types";
 
 type CanvasAnimationContext =
   | CanvasRenderingContext2D
@@ -18,7 +18,7 @@ class CanvasAnimation {
   private velocity: Vec2 = { x: 0, y: 0 };
   private activeCell = { index: 0, col: 0, row: 0 };
   private hoveredCell = { index: 0, col: 0, row: 0 };
-  private images: Array<GridImage> | null = null;
+  private images: Array<GridItem> | null = null;
 
   private framerate = 0;
   private prevTime = 0;
@@ -207,22 +207,19 @@ class CanvasAnimation {
     height: number
   ) {
     const imgAspectRatio = image.width / image.height;
-    const containerAspectRatio =
-      (this.cell.width - this.cell.outerPadding / 2) /
-      (this.cell.height - this.cell.outerPadding / 2);
+    const containerAspectRatio = width / height;
 
     let sourceX = 0;
     let sourceY = 0;
     let sourceWidth = image.width;
     let sourceHeight = image.height;
 
-    // Determine which dimension to scale by and calculate crop
     if (imgAspectRatio > containerAspectRatio) {
-      // Image is wider - crop the sides
+      // Image is wider relative to container - crop horizontally
       sourceWidth = image.height * containerAspectRatio;
       sourceX = (image.width - sourceWidth) / 2;
     } else {
-      // Image is taller - crop the top/bottom
+      // Image is taller relative to container - crop vertically
       sourceHeight = image.width / containerAspectRatio;
       sourceY = (image.height - sourceHeight) / 2;
     }
@@ -243,7 +240,7 @@ class CanvasAnimation {
   public render(timestamp: number) {
     if (!this.canvas) return;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.fillStyle = "#1a1a1a";
+    this.ctx.fillStyle = "#FFF";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.animateVelocity();
 
@@ -280,51 +277,80 @@ class CanvasAnimation {
       if (!isVisibleX || !isVisibleY) continue;
 
       //  MARK: Render visible cells ---------------------------------------------
-
-      // this.ctx.textAlign = "center";
-      // this.ctx.fillStyle = "white";
-      // this.ctx.fillText(
-      //   i.toString(),
-      //   rowIndex * width + shiftX + this.cell.width / 2,
-      //   colIndex * height + shiftY + this.cell.height / 2
-      // );
-
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.fillStyle = "#EFEFEF";
+      this.ctx.roundRect(
+        rowIndex * width + shiftX + this.cell.outerPadding,
+        colIndex * height + shiftY + this.cell.outerPadding,
+        this.cell.width - this.cell.outerPadding * 2,
+        this.cell.height - this.cell.outerPadding * 2,
+        24
+      );
+      if (!image || image.type === "product") this.ctx.fill();
+      this.ctx.closePath();
       if (image) {
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.fillStyle = "rgb(0 0 0 / 0.2)";
-        this.ctx.roundRect(
-          rowIndex * width + shiftX + this.cell.outerPadding,
-          colIndex * height + shiftY + this.cell.outerPadding,
-          this.cell.width - this.cell.outerPadding * 2,
-          this.cell.height - this.cell.outerPadding * 2,
-          24
-        );
-        this.ctx.closePath();
-        this.ctx.clip();
+        if (image.type === "influencer") {
+          this.ctx.clip();
+          this.renderImage(
+            image.element,
+            rowIndex * width + shiftX + this.cell.outerPadding,
+            colIndex * height + shiftY + this.cell.outerPadding,
+            this.cell.width - this.cell.outerPadding * 2,
+            this.cell.height - this.cell.outerPadding * 2
+          );
+        } else {
+          const containerWidth = this.cell.width - this.cell.innerPadding * 2;
+          const containerHeight =
+            image.element.height * (containerWidth / image.element.width);
+          const posY =
+            colIndex * height +
+            shiftY +
+            (this.cell.height - containerHeight) / 2;
 
-        this.renderImage(
-          image,
-          rowIndex * width + shiftX + this.cell.outerPadding,
-          colIndex * height + shiftY + this.cell.outerPadding,
-          this.cell.width - this.cell.outerPadding * 2,
-          this.cell.height - this.cell.outerPadding * 2
-        );
-        this.ctx.restore();
-      } else {
-        this.ctx.save();
+          this.ctx.beginPath();
+          this.ctx.fillStyle = "#EFEFEF";
+          this.ctx.roundRect(
+            rowIndex * width + shiftX + this.cell.innerPadding,
+            posY,
+            containerWidth,
+            containerHeight,
+            8
+          );
+          this.ctx.closePath();
+          this.ctx.clip();
+          this.renderImage(
+            image.element,
+            rowIndex * width + shiftX + this.cell.innerPadding,
+            posY,
+            containerWidth,
+            containerHeight
+          );
+        }
+      }
+      this.ctx.restore();
+
+      if (this.debugConfig.show) {
+        this.ctx.fillStyle = "rgb(0 0 0 / 0.5)";
         this.ctx.beginPath();
-        this.ctx.fillStyle = "#2a2a2a";
-        this.ctx.roundRect(
-          rowIndex * width + shiftX + this.cell.outerPadding,
-          colIndex * height + shiftY + this.cell.outerPadding,
-          this.cell.width - this.cell.outerPadding * 2,
-          this.cell.height - this.cell.outerPadding * 2,
-          24
+        this.ctx.ellipse(
+          rowIndex * width + shiftX + this.cell.innerPadding,
+          colIndex * height + shiftY + this.cell.innerPadding,
+          20,
+          20,
+          0,
+          0,
+          Math.PI * 2
         );
         this.ctx.fill();
         this.ctx.closePath();
-        this.ctx.restore();
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "white";
+        this.ctx.fillText(
+          i.toString(),
+          rowIndex * width + shiftX + this.cell.innerPadding,
+          colIndex * height + shiftY + this.cell.innerPadding
+        );
       }
     }
 
@@ -390,7 +416,7 @@ class CanvasAnimation {
     this.resize(width, height);
   }
 
-  public onImagesLoaded(images: Array<GridImage>) {
+  public onImagesLoaded(images: Array<GridItem>) {
     this.images = images;
   }
 }
