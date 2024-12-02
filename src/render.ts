@@ -1,9 +1,15 @@
 import { getGridDimensions } from "./utils/grid-dimensions";
+import { easeOutCubic, easeOutQuart, lerp } from "./utils/easings";
 import type { Box, GridItem, Vec2, Vec3 } from "./types";
 
 type CanvasAnimationContext =
   | CanvasRenderingContext2D
   | OffscreenCanvasRenderingContext2D;
+
+interface StyledGridItem extends GridItem {
+  opacity: number;
+  scale: number;
+}
 
 class CanvasAnimation {
   private ctx: CanvasAnimationContext;
@@ -18,7 +24,7 @@ class CanvasAnimation {
   private velocity: Vec2 = { x: 0, y: 0 };
   private activeCell: number | null = null;
   private hoveredCell: number | null = null;
-  private images: Array<GridItem> | null = null;
+  private images: Array<StyledGridItem> | null = null;
 
   private framerate = 0;
   private prevTime = 0;
@@ -227,6 +233,24 @@ class CanvasAnimation {
     );
   }
 
+  private setImageStyles(img: StyledGridItem, i: number) {
+    if (this.hoveredCell !== null) {
+      if (i === this.hoveredCell) {
+        img.opacity = lerp(img.opacity, 0.5, easeOutCubic(0.1));
+        img.scale = lerp(img.scale, 1.1, easeOutQuart(0.1));
+      } else {
+        if (img.opacity === 1 && img.scale === 1) return;
+        img.opacity = lerp(img.opacity, 1.0, easeOutCubic(0.1));
+        img.scale = lerp(img.scale, 1.0, easeOutQuart(0.1));
+      }
+    } else {
+      if (img.opacity === 1 && img.scale === 1) return;
+
+      img.opacity = lerp(img.opacity, 1.0, easeOutCubic(0.1));
+      img.scale = lerp(img.scale, 1.0, easeOutQuart(0.1));
+    }
+  }
+
   public render(timestamp: number) {
     if (!this.canvas) return;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -239,6 +263,7 @@ class CanvasAnimation {
 
     for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
       const image = this.images?.[i];
+      if (image) this.setImageStyles(image, i);
       const rowIndex = i % this.grid.cols;
       const colIndex = Math.floor(i / this.grid.cols);
       const { width, height } = this.cell;
@@ -267,6 +292,7 @@ class CanvasAnimation {
       if (!isVisibleX || !isVisibleY) continue;
 
       //  MARK: Render visible cells ---------------------------------------------
+      this.ctx.globalAlpha = image?.opacity ?? 1;
       this.ctx.save();
       this.ctx.beginPath();
       this.ctx.fillStyle = "#EFEFEF";
@@ -321,6 +347,7 @@ class CanvasAnimation {
       this.ctx.restore();
 
       if (this.debugConfig.show) {
+        this.ctx.globalAlpha = 1;
         this.ctx.fillStyle = "rgb(0 0 0 / 0.5)";
         this.ctx.beginPath();
         this.ctx.ellipse(
@@ -445,7 +472,11 @@ class CanvasAnimation {
   }
 
   public onImagesLoaded(images: Array<GridItem>) {
-    this.images = images;
+    this.images = images.map((img) => ({
+      ...img,
+      opacity: 1,
+      scale: 1,
+    }));
   }
 }
 
