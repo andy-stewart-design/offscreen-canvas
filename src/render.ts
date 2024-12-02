@@ -326,6 +326,7 @@ class CanvasAnimation {
 
   public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
     this.image = bitmap;
+    console.log(this.image);
   }
 }
 
