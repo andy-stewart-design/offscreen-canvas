@@ -264,13 +264,13 @@ class CanvasAnimation {
     for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
       const image = this.images?.[i];
       if (image) this.setImageStyles(image, i);
-      const rowIndex = i % this.grid.cols;
-      const colIndex = Math.floor(i / this.grid.cols);
+      const colIndex = i % this.grid.cols;
+      const rowIndex = Math.floor(i / this.grid.cols);
       const { width, height } = this.cell;
 
       //  MARK: Virtualize rendering ---------------------------------------------
-      const cellMinX = this.camera.x + rowIndex * width;
-      const cellMinY = this.camera.y + colIndex * height;
+      const cellMinX = this.camera.x + colIndex * width;
+      const cellMinY = this.camera.y + rowIndex * height;
       const shiftX =
         cellMinX + width < 0
           ? this.canvas.width
@@ -293,55 +293,43 @@ class CanvasAnimation {
 
       //  MARK: Render visible cells ---------------------------------------------
       this.ctx.globalAlpha = image?.opacity ?? 1;
+      const cellX = colIndex * this.cell.width + shiftX;
+      const cellY = rowIndex * this.cell.height + shiftY;
+      const outerW =
+        (this.cell.width - this.cell.outerPadding * 2) * (image?.scale ?? 1);
+      const outerH =
+        (this.cell.height - this.cell.outerPadding * 2) * (image?.scale ?? 1);
+      const outerX = cellX + (this.cell.width - outerW) / 2;
+      const outerY = cellY + (this.cell.height - outerH) / 2;
+
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.fillStyle = "#EFEFEF";
-      this.ctx.roundRect(
-        rowIndex * width + shiftX + this.cell.outerPadding,
-        colIndex * height + shiftY + this.cell.outerPadding,
-        this.cell.width - this.cell.outerPadding * 2,
-        this.cell.height - this.cell.outerPadding * 2,
-        24
-      );
+      this.ctx.fillStyle = "#F7F7F7";
+      this.ctx.roundRect(outerX, outerY, outerW, outerH, 24);
       if (!image || image.type === "product") this.ctx.fill();
       this.ctx.closePath();
+
       if (image) {
         if (image.type === "influencer") {
           this.ctx.clip();
-          this.renderImage(
-            image.element,
-            rowIndex * width + shiftX + this.cell.outerPadding,
-            colIndex * height + shiftY + this.cell.outerPadding,
-            this.cell.width - this.cell.outerPadding * 2,
-            this.cell.height - this.cell.outerPadding * 2
-          );
+          this.renderImage(image.element, outerX, outerY, outerW, outerH);
         } else {
-          const containerWidth = this.cell.width - this.cell.innerPadding * 2;
-          const containerHeight =
-            image.element.height * (containerWidth / image.element.width);
-          const posY =
-            colIndex * height +
-            shiftY +
-            (this.cell.height - containerHeight) / 2;
+          const imgAspectRatio = image.element.height / image.element.width;
+          const maxAspectRatio = (outerH * 1.25) / outerW;
+          const finalAspectRatio = Math.min(imgAspectRatio, maxAspectRatio);
+          const innerW =
+            outerW - (this.cell.innerPadding - this.cell.outerPadding) * 2;
+          const innerH = innerW * finalAspectRatio;
+          const innerX =
+            outerX + this.cell.innerPadding - this.cell.outerPadding;
+          const innerY = outerY + (outerH - innerH) / 2;
 
           this.ctx.beginPath();
           this.ctx.fillStyle = "#EFEFEF";
-          this.ctx.roundRect(
-            rowIndex * width + shiftX + this.cell.innerPadding,
-            posY,
-            containerWidth,
-            containerHeight,
-            8
-          );
+          this.ctx.roundRect(innerX, innerY, innerW, innerH, 8);
           this.ctx.closePath();
           this.ctx.clip();
-          this.renderImage(
-            image.element,
-            rowIndex * width + shiftX + this.cell.innerPadding,
-            posY,
-            containerWidth,
-            containerHeight
-          );
+          this.renderImage(image.element, innerX, innerY, innerW, innerH);
         }
       }
       this.ctx.restore();
@@ -351,8 +339,8 @@ class CanvasAnimation {
         this.ctx.fillStyle = "rgb(0 0 0 / 0.5)";
         this.ctx.beginPath();
         this.ctx.ellipse(
-          rowIndex * width + shiftX + this.cell.innerPadding,
-          colIndex * height + shiftY + this.cell.innerPadding,
+          colIndex * width + shiftX + this.cell.innerPadding,
+          rowIndex * height + shiftY + this.cell.innerPadding,
           16,
           16,
           0,
@@ -366,8 +354,8 @@ class CanvasAnimation {
         this.ctx.fillStyle = "white";
         this.ctx.fillText(
           i.toString(),
-          rowIndex * width + shiftX + this.cell.innerPadding,
-          colIndex * height + shiftY + this.cell.innerPadding
+          colIndex * width + shiftX + this.cell.innerPadding,
+          rowIndex * height + shiftY + this.cell.innerPadding
         );
       }
     }
