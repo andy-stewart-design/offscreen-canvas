@@ -3,7 +3,7 @@ import type {
   OffscreenCanvasInit,
   OffscreenCanvasMessageEvent,
 } from "./send-to-worker";
-import type { Vec2 } from "./types";
+import type { GridImage, Vec2 } from "./types";
 
 class OffscreenCanvasRenderer {
   private canvas: OffscreenCanvas | null = null;
@@ -48,8 +48,8 @@ class OffscreenCanvasRenderer {
     this.animation?.onWheel(deltaX, deltaY);
   }
 
-  public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
-    this.animation?.onImageLoaded(bitmap);
+  public onImageLoaded(images: Array<GridImage>) {
+    this.animation?.onImagesLoaded(images);
   }
 
   public resize(width: number, height: number) {
@@ -92,6 +92,6 @@ function handleOffscreenCanvasMessage({ data }: OffscreenCanvasMessageEvent) {
   } else if (data.type === "resize") {
     renderer.resize(data.width, data.height);
   } else if (data.type === "image") {
-    renderer.onImageLoaded(data.image);
+    renderer.onImageLoaded(data.images);
   }
 }

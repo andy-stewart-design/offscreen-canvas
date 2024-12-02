@@ -16,4 +16,6 @@ interface Box {
   height: number;
 }
 
-export type { Vec2, Vec3, Box };
+type GridImage = ImageBitmap | HTMLImageElement | null;
+
+export type { Vec2, Vec3, Box, GridImage };

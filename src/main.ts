@@ -2,6 +2,9 @@ import CanvasAnimation from "./render";
 import { sendToWorker } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
 import { getDpr } from "./utils/device-pixel-ratio";
+import { IMAGE_SOURCES } from "./images";
+import { createArray } from "./utils/array";
+import type { GridImage } from "./types";
 import "./main.css";
 
 class HTMLCanvasRenderer {
@@ -9,6 +12,9 @@ class HTMLCanvasRenderer {
   private ctx: CanvasRenderingContext2D | null;
   private isOffscreen: boolean;
   private animation: CanvasAnimation | null = null;
+
+  private imageSources: Array<string> = IMAGE_SOURCES;
+  private images: Array<GridImage> = createArray(null, IMAGE_SOURCES.length);
 
   private dpr: number;
   private rafId = 0;
@@ -68,6 +74,28 @@ class HTMLCanvasRenderer {
     if (!this.isOffscreen && this.ctx) this.ctx.scale(scale, scale);
   }
 
+  private loadImages() {
+    this.imageSources.forEach((src, i) => {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.src = src;
+      image.onload = async () => {
+        if (this.isOffscreen) {
+          const bitmap = await createImageBitmap(image); // Resolve the promise
+          this.images[i] = bitmap;
+          if (this.images.findIndex((img) => img === null) === -1) {
+            sendToWorker({ type: "image", images: this.images });
+          }
+        } else {
+          this.images[i] = image;
+          if (this.images.findIndex((img) => img === null) === -1) {
+            this.animation?.onImagesLoaded(this.images);
+          }
+        }
+      };
+    });
+  }
+
   private handlePressStart(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
@@ -100,21 +128,21 @@ class HTMLCanvasRenderer {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
       sendToWorker({ type: "click", x, y });
-      const image = new Image();
-      image.crossOrigin = "anonymous";
-      image.src = "https://picsum.photos/200/300";
-      image.onload = async () => {
-        const bitmap = await createImageBitmap(image); // Resolve the promise
-        sendToWorker({ type: "image", image: bitmap });
-      };
+      // const image = new Image();
+      // image.crossOrigin = "anonymous";
+      // image.src = "https://picsum.photos/200/300";
+      // image.onload = async () => {
+      //   const bitmap = await createImageBitmap(image); // Resolve the promise
+      //   sendToWorker({ type: "image", image: bitmap });
+      // };
     } else {
       this.animation?.onClick(x, y);
-      const image = new Image();
-      image.crossOrigin = "anonymous";
-      image.src = "https://picsum.photos/200/300";
-      image.onload = () => {
-        this.animation?.onImageLoaded(image);
-      };
+      // const image = new Image();
+      // image.crossOrigin = "anonymous";
+      // image.src = "https://picsum.photos/200/300";
+      // image.onload = () => {
+      //   this.animation?.onImageLoaded(image);
+      // };
     }
   }
 
@@ -207,6 +235,7 @@ class HTMLCanvasRenderer {
     const { width, height } = node.getBoundingClientRect();
     node.appendChild(this.canvasEl);
     this.animation?.onResize(width, height);
+    this.loadImages();
   }
 
   public destroy() {

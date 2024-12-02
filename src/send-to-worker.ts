@@ -1,3 +1,4 @@
+import { GridImage } from "./types";
 import OffscreenCanvasWorker from "./worker?worker";
 
 interface OffscreenCanvasInit {
@@ -45,7 +46,7 @@ interface OffscreenCanvasResizeEvent {
 
 interface OffscreenCanvasImageEvent {
   type: "image";
-  image: ImageBitmap | HTMLImageElement;
+  images: Array<GridImage>;
 }
 
 type OffscreenCanvasMessage =

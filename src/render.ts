@@ -1,4 +1,4 @@
-import type { Box, Vec2, Vec3 } from "./types";
+import type { Box, GridImage, Vec2, Vec3 } from "./types";
 
 type CanvasAnimationContext =
   | CanvasRenderingContext2D
@@ -17,7 +17,7 @@ class CanvasAnimation {
   private velocity: Vec2 = { x: 0, y: 0 };
   private activeCell = { index: 0, col: 0, row: 0 };
   private hoveredCell = { index: 0, col: 0, row: 0 };
-  private image: ImageBitmap | HTMLImageElement | null = null;
+  private images: Array<GridImage> | null = null;
 
   private framerate = 0;
   private prevTime = 0;
@@ -316,9 +316,9 @@ class CanvasAnimation {
     this.resize(width, height);
   }
 
-  public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
-    this.image = bitmap;
-    console.log(this.image);
+  public onImagesLoaded(images: Array<GridImage>) {
+    this.images = images;
+    console.log(this.images);
   }
 }
 
