@@ -145,11 +145,18 @@ class CanvasAnimation {
   }
 
   private panCamera(dx: number, dy: number) {
-    this.camera = {
-      x: this.camera.x - dx / this.camera.z,
-      y: this.camera.y - dy / this.camera.z,
-      z: this.camera.z,
-    };
+    if (-this.camera.x < 0) this.camera.x = -this.canvas.width;
+    else if (-this.camera.x > this.canvas.width) this.camera.x = 0;
+    else this.camera.x = this.camera.x - dx / this.camera.z;
+
+    if (-this.camera.y < 0) this.camera.y = -this.canvas.height;
+    else if (-this.camera.y > this.canvas.height) this.camera.y = 0;
+    else this.camera.y = this.camera.y - dy / this.camera.z;
+    // this.camera = {
+    //   x: this.camera.x - dx / this.camera.z,
+    //   y: this.camera.y - dy / this.camera.z,
+    //   z: this.camera.z,
+    // };
     this.viewport = {
       minX: -this.camera.x,
       minY: -this.camera.y,
@@ -190,14 +197,35 @@ class CanvasAnimation {
       const cellMinY = this.camera.y + colIndex * height;
       const cellMaxX = cellMinX + width;
       const cellMaxY = cellMinY + height;
-      const isVisibleX = cellMaxX >= 0 && cellMinX <= this.viewport.width;
-      const isVisibleY = cellMaxY >= 0 && cellMinY <= this.viewport.height;
+      const shiftX =
+        cellMaxX < 0
+          ? this.canvas.width
+          : cellMinX > this.viewport.width + this.cell.width
+          ? -this.canvas.width
+          : 0;
+      const shiftY =
+        cellMaxY < 0
+          ? this.canvas.height
+          : cellMinY > this.viewport.height + this.cell.height
+          ? -this.canvas.height
+          : 0;
+
+      const isVisibleX =
+        shiftX + cellMaxX < this.viewport.width + this.cell.width;
+      const isVisibleY =
+        shiftY + cellMaxY < this.viewport.height + this.cell.height;
+
       if (!isVisibleX || !isVisibleY) continue;
 
       this.ctx.fillStyle = "#1a1a1a";
       this.ctx.strokeStyle = "#3a3a3a";
       this.ctx.beginPath();
-      this.ctx.rect(rowIndex * width, colIndex * height, width, height);
+      this.ctx.rect(
+        rowIndex * width + shiftX,
+        colIndex * height + shiftY,
+        width,
+        height
+      );
       this.ctx.fill();
       this.ctx.stroke();
       this.ctx.closePath();
@@ -206,8 +234,8 @@ class CanvasAnimation {
       this.ctx.fillStyle = "white";
       this.ctx.fillText(
         i.toString(),
-        rowIndex * width + this.cell.width / 2,
-        colIndex * height + this.cell.height / 2
+        rowIndex * width + shiftX + this.cell.width / 2,
+        colIndex * height + shiftY + this.cell.height / 2
       );
     }
 
