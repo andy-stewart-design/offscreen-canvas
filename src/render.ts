@@ -314,6 +314,7 @@ class CanvasAnimation {
           this.ctx.clip();
           this.renderImage(image.element, outerX, outerY, outerW, outerH);
         } else {
+          this.ctx.save();
           const imgAspectRatio = image.element.height / image.element.width;
           const maxAspectRatio = (outerH * 1.25) / outerW;
           const finalAspectRatio = Math.min(imgAspectRatio, maxAspectRatio);
@@ -330,6 +331,45 @@ class CanvasAnimation {
           this.ctx.closePath();
           this.ctx.clip();
           this.renderImage(image.element, innerX, innerY, innerW, innerH);
+          this.ctx.restore();
+        }
+
+        const titleOpacity = Number(((1 - image.opacity) * 2).toFixed(2));
+
+        if (titleOpacity > 0.05) {
+          this.ctx.font = `${12 * image.scale}px Market Sans`;
+          const maxLetters = Math.floor(
+            (outerW - 48) / this.ctx.measureText("0").width
+          );
+          const title =
+            image.title.length > maxLetters
+              ? `${image.title.slice(0, maxLetters).trim()}…`
+              : image.title;
+          const { width } = this.ctx.measureText(title);
+          this.ctx.globalAlpha = Number(titleOpacity);
+          this.ctx.fillStyle = "#FFF";
+          this.ctx.beginPath();
+          this.ctx.shadowColor =
+            image.type === "product"
+              ? "rgb(0 0 0 / 0.05)"
+              : "rgb(0 0 0 / 0.25)";
+          this.ctx.shadowBlur = 24;
+          this.ctx.shadowOffsetY = 10;
+          this.ctx.roundRect(
+            outerX + (outerW - width - 40) / 2,
+            outerY + outerH - 60,
+            width + 40,
+            36,
+            20
+          );
+          this.ctx.fill();
+          this.ctx.closePath();
+          this.ctx.shadowColor = "transparent";
+          this.ctx.shadowOffsetY = 0;
+          this.ctx.fillStyle = "#8f8f8f";
+          this.ctx.textAlign = "center";
+          this.ctx.textBaseline = "middle";
+          this.ctx.fillText(title, outerX + outerW / 2, outerY + outerH - 41);
         }
       }
       this.ctx.restore();
