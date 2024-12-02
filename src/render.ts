@@ -34,26 +34,7 @@ class CanvasAnimation {
   constructor(ctx: CanvasAnimationContext, width: number, height: number) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
-    this.viewport = {
-      minX: -this.camera.x,
-      minY: -this.camera.y,
-      maxX: -this.camera.x + width,
-      maxY: -this.camera.y + height,
-      width: width,
-      height: height,
-    };
-    this.cell = {
-      width: this.viewport.width / 3,
-      height: this.viewport.height / 3,
-    };
-    this.canvas = {
-      minX: 0,
-      minY: 0,
-      maxX: width * this.grid.cols,
-      maxY: height * this.grid.rows,
-      width: width * this.grid.cols,
-      height: height * this.grid.rows,
-    };
+    this.resize(width, height);
   }
 
   private drawDebugPanel(timestamp: number) {
@@ -180,6 +161,33 @@ class CanvasAnimation {
     };
   }
 
+  private resize(width: number, height: number) {
+    this.viewport = {
+      minX: -this.camera.x,
+      minY: -this.camera.y,
+      maxX: -this.camera.x + width,
+      maxY: -this.camera.y + height,
+      width: width,
+      height: height,
+    };
+    const cellWidth = Math.max(
+      this.viewport.width / 3,
+      this.viewport.height / 3
+    );
+    this.cell = {
+      width: cellWidth,
+      height: (cellWidth / 3) * 4,
+    };
+    this.canvas = {
+      minX: 0,
+      minY: 0,
+      maxX: this.cell.width * this.grid.cols,
+      maxY: this.cell.height * this.grid.rows,
+      width: this.cell.width * this.grid.cols,
+      height: this.cell.height * this.grid.rows,
+    };
+  }
+
   public render(timestamp: number) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.animateVelocity();
@@ -195,28 +203,27 @@ class CanvasAnimation {
       //  MARK: Virtualize rendering ---------------------------------------------
       const cellMinX = this.camera.x + rowIndex * width;
       const cellMinY = this.camera.y + colIndex * height;
-      const cellMaxX = cellMinX + width;
-      const cellMaxY = cellMinY + height;
       const shiftX =
-        cellMaxX < 0
+        cellMinX + width < 0
           ? this.canvas.width
           : cellMinX > this.viewport.width + this.cell.width
           ? -this.canvas.width
           : 0;
       const shiftY =
-        cellMaxY < 0
+        cellMinY + height < 0
           ? this.canvas.height
           : cellMinY > this.viewport.height + this.cell.height
           ? -this.canvas.height
           : 0;
 
       const isVisibleX =
-        shiftX + cellMaxX < this.viewport.width + this.cell.width;
+        shiftX + cellMinX + width < this.viewport.width + this.cell.width;
       const isVisibleY =
-        shiftY + cellMaxY < this.viewport.height + this.cell.height;
+        shiftY + cellMinY + height < this.viewport.height + this.cell.height;
 
       if (!isVisibleX || !isVisibleY) continue;
 
+      //  MARK: Render visible cells ---------------------------------------------
       this.ctx.fillStyle = "#1a1a1a";
       this.ctx.strokeStyle = "#3a3a3a";
       this.ctx.beginPath();
@@ -306,22 +313,7 @@ class CanvasAnimation {
   }
 
   public onResize(width: number, height: number) {
-    this.cell = { width: width / 3, height: height / 3 };
-    this.canvas = {
-      ...this.canvas,
-      maxX: this.cell.width * this.grid.cols,
-      maxY: this.cell.height * this.grid.rows,
-      width: this.cell.width * this.grid.cols,
-      height: this.cell.height * this.grid.rows,
-    };
-    this.viewport = {
-      minX: -this.camera.x,
-      minY: -this.camera.y,
-      maxX: -this.camera.x + width,
-      maxY: -this.camera.y + height,
-      width: width,
-      height: height,
-    };
+    this.resize(width, height);
   }
 
   public onImageLoaded(bitmap: ImageBitmap | HTMLImageElement) {
