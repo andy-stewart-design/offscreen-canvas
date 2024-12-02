@@ -26,7 +26,8 @@ class OffscreenCanvasRenderer {
     this.animation = new CanvasAnimation(
       this.ctx,
       this.canvas.width,
-      this.canvas.height
+      this.canvas.height,
+      100
     );
 
     this.render(0);

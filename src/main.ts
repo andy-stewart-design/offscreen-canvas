@@ -58,7 +58,8 @@ class HTMLCanvasRenderer {
       this.animation = new CanvasAnimation(
         this.ctx,
         defaultWidth,
-        defaultHeight
+        defaultHeight,
+        IMAGE_SOURCES.length
       );
 
       this.render(0);

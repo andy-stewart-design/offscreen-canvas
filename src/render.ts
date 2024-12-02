@@ -1,3 +1,4 @@
+import { getGridDimensions } from "./utils/grid-dimensions";
 import type { Box, GridImage, Vec2, Vec3 } from "./types";
 
 type CanvasAnimationContext =
@@ -9,8 +10,8 @@ class CanvasAnimation {
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
   private canvas: Box;
   private viewport: Box;
-  private grid = { rows: 6, cols: 6 };
-  private cell = { width: 0, height: 0 };
+  private grid: { cols: number; rows: number };
+  private cell = { width: 0, height: 0, outerPadding: 0, innerPadding: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
 
   private pressStartPoint: Vec2 = { x: 0, y: 0 };
@@ -31,10 +32,17 @@ class CanvasAnimation {
     fontSize: 16,
   };
 
-  constructor(ctx: CanvasAnimationContext, width: number, height: number) {
+  constructor(
+    ctx: CanvasAnimationContext,
+    width: number,
+    height: number,
+    numItems: number
+  ) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
     this.resize(width, height);
+    const [cols, rows] = getGridDimensions(numItems);
+    this.grid = { cols, rows };
   }
 
   private drawDebugPanel(timestamp: number) {
@@ -162,6 +170,7 @@ class CanvasAnimation {
   }
 
   private resize(width: number, height: number) {
+    if (!this.grid) return;
     this.viewport = {
       minX: -this.camera.x,
       minY: -this.camera.y,
@@ -171,12 +180,14 @@ class CanvasAnimation {
       height: height,
     };
     const cellWidth = Math.max(
-      this.viewport.width / 3,
-      this.viewport.height / 3
+      this.viewport.width / 3.5,
+      this.viewport.height / 3.5
     );
     this.cell = {
       width: cellWidth,
-      height: (cellWidth / 3) * 4,
+      height: (cellWidth / 4) * 5,
+      outerPadding: cellWidth * 0.125,
+      innerPadding: cellWidth * 0.25,
     };
     this.canvas = {
       minX: 0,
@@ -188,14 +199,59 @@ class CanvasAnimation {
     };
   }
 
+  private renderImage(
+    image: ImageBitmap | HTMLImageElement,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ) {
+    const imgAspectRatio = image.width / image.height;
+    const containerAspectRatio =
+      (this.cell.width - this.cell.outerPadding / 2) /
+      (this.cell.height - this.cell.outerPadding / 2);
+
+    let sourceX = 0;
+    let sourceY = 0;
+    let sourceWidth = image.width;
+    let sourceHeight = image.height;
+
+    // Determine which dimension to scale by and calculate crop
+    if (imgAspectRatio > containerAspectRatio) {
+      // Image is wider - crop the sides
+      sourceWidth = image.height * containerAspectRatio;
+      sourceX = (image.width - sourceWidth) / 2;
+    } else {
+      // Image is taller - crop the top/bottom
+      sourceHeight = image.width / containerAspectRatio;
+      sourceY = (image.height - sourceHeight) / 2;
+    }
+
+    this.ctx.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      x,
+      y,
+      width,
+      height
+    );
+  }
+
   public render(timestamp: number) {
+    if (!this.canvas) return;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillStyle = "#1a1a1a";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.animateVelocity();
 
     this.ctx.save();
     this.ctx.translate(this.camera.x, this.camera.y);
 
     for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
+      const image = this.images?.[i];
       const rowIndex = i % this.grid.cols;
       const colIndex = Math.floor(i / this.grid.cols);
       const { width, height } = this.cell;
@@ -224,35 +280,53 @@ class CanvasAnimation {
       if (!isVisibleX || !isVisibleY) continue;
 
       //  MARK: Render visible cells ---------------------------------------------
-      this.ctx.fillStyle = "#1a1a1a";
-      this.ctx.strokeStyle = "#3a3a3a";
-      this.ctx.beginPath();
-      this.ctx.rect(
-        rowIndex * width + shiftX,
-        colIndex * height + shiftY,
-        width,
-        height
-      );
-      this.ctx.fill();
-      this.ctx.stroke();
-      this.ctx.closePath();
 
-      this.ctx.textAlign = "center";
-      this.ctx.fillStyle = "white";
-      this.ctx.fillText(
-        i.toString(),
-        rowIndex * width + shiftX + this.cell.width / 2,
-        colIndex * height + shiftY + this.cell.height / 2
-      );
+      // this.ctx.textAlign = "center";
+      // this.ctx.fillStyle = "white";
+      // this.ctx.fillText(
+      //   i.toString(),
+      //   rowIndex * width + shiftX + this.cell.width / 2,
+      //   colIndex * height + shiftY + this.cell.height / 2
+      // );
+
+      if (image) {
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "rgb(0 0 0 / 0.2)";
+        this.ctx.roundRect(
+          rowIndex * width + shiftX + this.cell.outerPadding,
+          colIndex * height + shiftY + this.cell.outerPadding,
+          this.cell.width - this.cell.outerPadding * 2,
+          this.cell.height - this.cell.outerPadding * 2,
+          24
+        );
+        this.ctx.closePath();
+        this.ctx.clip();
+
+        this.renderImage(
+          image,
+          rowIndex * width + shiftX + this.cell.outerPadding,
+          colIndex * height + shiftY + this.cell.outerPadding,
+          this.cell.width - this.cell.outerPadding * 2,
+          this.cell.height - this.cell.outerPadding * 2
+        );
+        this.ctx.restore();
+      } else {
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "#2a2a2a";
+        this.ctx.roundRect(
+          rowIndex * width + shiftX + this.cell.outerPadding,
+          colIndex * height + shiftY + this.cell.outerPadding,
+          this.cell.width - this.cell.outerPadding * 2,
+          this.cell.height - this.cell.outerPadding * 2,
+          24
+        );
+        this.ctx.fill();
+        this.ctx.closePath();
+        this.ctx.restore();
+      }
     }
-
-    // if (this.image) {
-    //   this.ctx.drawImage(
-    //     this.image,
-    //     this.cell.width / 2 - this.image.width / 2,
-    //     this.cell.height / 2 - this.image.height / 2
-    //   );
-    // }
 
     this.ctx.restore();
 
@@ -318,7 +392,6 @@ class CanvasAnimation {
 
   public onImagesLoaded(images: Array<GridImage>) {
     this.images = images;
-    console.log(this.images);
   }
 }
 
