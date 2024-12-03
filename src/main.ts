@@ -1,5 +1,6 @@
 import CanvasAnimation from "./render";
-import { sendToWorker } from "./send-to-worker";
+import OffscreenCanvasWorker from "./worker?worker";
+import { OffscreenCanvasMessage } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
 import { getDpr } from "./utils/device-pixel-ratio";
 import { IMAGE_SOURCES } from "./images";
@@ -7,12 +8,14 @@ import { createArray } from "./utils/array";
 import type { GridItem, GridItemSource } from "./types";
 import { isNonNullArray } from "./utils/null-check";
 import "./main.css";
+import ObservableValue from "./observable";
 
 class HTMLCanvasRenderer {
   private canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
+  private worker: Worker | null;
+  private animation: CanvasAnimation | null;
   private isOffscreen: boolean;
-  private animation: CanvasAnimation | null = null;
 
   private imageSources: Array<GridItemSource> = IMAGE_SOURCES;
   private images: Array<GridItem | null> = createArray(
@@ -22,6 +25,9 @@ class HTMLCanvasRenderer {
 
   private dpr: number;
   private rafId = 0;
+
+  public isLoaded: ObservableValue<boolean> = new ObservableValue(false);
+  public activeIndex = new ObservableValue<number | null>(null);
 
   private resizeObserver: ResizeObserver;
   private boundHandlePressStart: (e: MouseEvent | TouchEvent) => void;
@@ -49,13 +55,22 @@ class HTMLCanvasRenderer {
 
     if (this.isOffscreen) {
       this.ctx = null;
+      this.animation = null;
+      this.worker = new OffscreenCanvasWorker();
+      this.worker.onmessage = (e) => {
+        if (e.data.type === "activeIndex") {
+          this.activeIndex.value = e.data.index;
+        }
+      };
+
       const offscreen = this.canvasEl.transferControlToOffscreen();
-      sendToWorker({
+      this.sendToWorker({
         type: "init",
         canvas: offscreen,
         dpr: this.dpr,
       });
     } else {
+      this.worker = null;
       const ctx = this.canvasEl.getContext("2d");
       if (!ctx) throw new Error("Could not get 2d context in html canvas");
       this.ctx = ctx;
@@ -65,6 +80,9 @@ class HTMLCanvasRenderer {
         defaultHeight,
         IMAGE_SOURCES.length
       );
+      this.animation.activeIndex.subscribe((next) => {
+        this.activeIndex.value = next;
+      });
 
       this.render(0);
     }
@@ -77,6 +95,16 @@ class HTMLCanvasRenderer {
     this.canvasEl.style.width = `100%`;
     this.canvasEl.style.height = `100%`;
     if (!this.isOffscreen && this.ctx) this.ctx.scale(scale, scale);
+  }
+
+  private sendToWorker(msg: OffscreenCanvasMessage) {
+    if (!this.worker) return;
+    if (msg.type === "init") {
+      const { canvas, ...props } = msg;
+      this.worker.postMessage({ ...props, canvas }, [canvas]);
+    } else {
+      this.worker.postMessage(msg);
+    }
   }
 
   private loadImages() {
@@ -93,7 +121,8 @@ class HTMLCanvasRenderer {
             type: source.type,
           };
           if (isNonNullArray(this.images)) {
-            sendToWorker({ type: "image", images: this.images });
+            this.sendToWorker({ type: "image", images: this.images });
+            this.isLoaded.value = true;
           }
         } else {
           this.images[i] = {
@@ -103,6 +132,7 @@ class HTMLCanvasRenderer {
           };
           if (isNonNullArray(this.images)) {
             this.animation?.onImagesLoaded(this.images);
+            this.isLoaded.value = true;
           }
         }
       };
@@ -112,7 +142,7 @@ class HTMLCanvasRenderer {
   private handlePressStart(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
-      sendToWorker({
+      this.sendToWorker({
         type: "pressStart",
         isPressed: true,
         x,
@@ -126,7 +156,7 @@ class HTMLCanvasRenderer {
   private handlePressEnd(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
-      sendToWorker({
+      this.sendToWorker({
         type: "pressEnd",
         isPressed: false,
         x,
@@ -140,7 +170,7 @@ class HTMLCanvasRenderer {
   private handleClick(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
-      sendToWorker({ type: "click", x, y });
+      this.sendToWorker({ type: "click", x, y });
     } else {
       this.animation?.onClick(x, y);
     }
@@ -149,7 +179,7 @@ class HTMLCanvasRenderer {
   private handleMove(e: MouseEvent | TouchEvent) {
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
-      sendToWorker({ type: "mouseMove", x, y });
+      this.sendToWorker({ type: "mouseMove", x, y });
     } else {
       this.animation?.onMove(x, y);
     }
@@ -157,7 +187,7 @@ class HTMLCanvasRenderer {
 
   private handleMouseOut() {
     if (this.isOffscreen) {
-      sendToWorker({
+      this.sendToWorker({
         type: "pressEnd",
         isPressed: false,
       });
@@ -169,7 +199,7 @@ class HTMLCanvasRenderer {
   private handleWheel(e: WheelEvent) {
     e.preventDefault();
     if (this.isOffscreen) {
-      sendToWorker({
+      this.sendToWorker({
         type: "wheel",
         deltaX: e.deltaX,
         deltaY: e.deltaY,
@@ -184,7 +214,7 @@ class HTMLCanvasRenderer {
       const { width, height } = entries[0].contentRect;
 
       if (this.isOffscreen) {
-        sendToWorker({
+        this.sendToWorker({
           type: "resize",
           width: width,
           height: height,
@@ -244,6 +274,10 @@ class HTMLCanvasRenderer {
     this.removeEventListeners();
     this.resizeObserver.unobserve(this.canvasEl);
     this.resizeObserver.disconnect();
+    this.animation?.activeIndex.unsubscribeAll();
+    this.activeIndex.unsubscribeAll();
+    this.isLoaded.unsubscribeAll();
+    if (this.worker) this.worker.onmessage = null;
   }
 }
 
@@ -254,3 +288,9 @@ const canvasRenderer = new HTMLCanvasRenderer(
   window.innerHeight
 );
 canvasRenderer.appendTo(app);
+canvasRenderer.isLoaded.subscribe((isLoaded) => {
+  console.log("The scene is loaded: ", isLoaded);
+});
+canvasRenderer.activeIndex.subscribe((index) => {
+  console.log("The active index is: ", index);
+});

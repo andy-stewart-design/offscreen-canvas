@@ -1,4 +1,3 @@
-import OffscreenCanvasWorker from "./worker?worker";
 import type { GridItem } from "./types";
 
 interface OffscreenCanvasInit {
@@ -57,22 +56,12 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasWheelEvent
   | OffscreenCanvasResizeEvent
   | OffscreenCanvasImageEvent;
+
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
 
-const worker = new OffscreenCanvasWorker();
-
-function sendToWorker(msg: OffscreenCanvasMessage) {
-  if (msg.type === "init") {
-    const { canvas, ...props } = msg;
-    worker.postMessage({ ...props, canvas }, [canvas]);
-  } else {
-    worker.postMessage(msg);
-  }
-}
-
 export {
-  sendToWorker,
   type OffscreenCanvasInit,
+  type OffscreenCanvasMessage,
   type OffscreenCanvasMessageEvent,
   type OffscreenCanvasMoveEvent,
   type OffscreenCanvasPressEvent,

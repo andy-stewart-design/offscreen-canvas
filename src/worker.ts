@@ -30,6 +30,10 @@ class OffscreenCanvasRenderer {
       100
     );
 
+    this.animation.activeIndex.subscribe((index) =>
+      self.postMessage({ type: "activeIndex", index })
+    );
+
     this.render(0);
   }
 
@@ -73,6 +77,7 @@ class OffscreenCanvasRenderer {
 
   public destroy() {
     cancelAnimationFrame(this.rafId);
+    this.animation?.activeIndex.unsubscribeAll();
   }
 }
 

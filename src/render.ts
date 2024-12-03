@@ -1,6 +1,7 @@
 import { getGridDimensions } from "./utils/grid-dimensions";
 import { easeOutCubic, easeOutQuart, lerp } from "./utils/easings";
 import type { Box, GridItem, Vec2, Vec3 } from "./types";
+import ObservableValue from "./observable";
 
 type CanvasAnimationContext =
   | CanvasRenderingContext2D
@@ -22,7 +23,7 @@ class CanvasAnimation {
 
   private pressStartPoint: Vec2 = { x: 0, y: 0 };
   private velocity: Vec2 = { x: 0, y: 0 };
-  private activeCell: number | null = null;
+  public activeIndex = new ObservableValue<number | null>(null);
   private hoveredCell: number | null = null;
   private images: Array<StyledGridItem> | null = null;
 
@@ -34,8 +35,8 @@ class CanvasAnimation {
 
   private debugConfig = {
     show: true,
-    pos: { x: 10, y: 16 },
-    fontSize: 16,
+    pos: { x: 10, y: 13 },
+    fontSize: 13,
   };
 
   constructor(
@@ -69,39 +70,45 @@ class CanvasAnimation {
       this.ctx.save();
       this.ctx.font = `300 ${fontSize}px system-ui`;
       this.ctx.fillStyle = "rgb(0 0 0 / 0.75)";
-      this.ctx.fillRect(0, 0, 312, 232);
+      this.ctx.fillRect(0, 0, 264, 188);
       this.ctx.fillStyle = "#efefef";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
       this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
       this.ctx.fillText(
-        `Camera: ${this.camera.x.toFixed(2)}, 
-        ${this.camera.y.toFixed(2)}`,
+        `Camera: ${this.camera.x.toFixed(2)}, ${this.camera.y.toFixed(2)}`,
         pos.x,
         pos.y * 4
       );
       this.ctx.fillText(
-        `Viewport: ${this.viewport.minX.toFixed(1)}, 
-        ${this.viewport.minY.toFixed(1)},
-        ${this.viewport.maxX.toFixed(1)}, 
-        ${this.viewport.maxY.toFixed(1)}`,
+        `Viewport: ${this.viewport.minX.toFixed(
+          1
+        )}, ${this.viewport.minY.toFixed(1)},${this.viewport.maxX.toFixed(
+          1
+        )}, ${this.viewport.maxY.toFixed(1)}`,
         pos.x,
         pos.y * 5.5
       );
       this.ctx.fillText(
-        `Mouse: ${this.mouse?.current.x.toFixed(2)}, 
-        ${this.mouse?.current.y.toFixed(2)}`,
+        `Mouse: ${this.mouse?.current.x.toFixed(
+          2
+        )}, ${this.mouse?.current.y.toFixed(2)}`,
         pos.x,
         pos.y * 7
       );
       this.ctx.fillText(
-        `Velocity: ${this.velocity.x.toFixed(2)}, 
-        ${this.velocity.y.toFixed(2)}`,
+        `Velocity: ${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(
+          2
+        )}`,
         pos.x,
         pos.y * 8.5
       );
       this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 10);
-      this.ctx.fillText(`Active Cell: ${this.activeCell}`, pos.x, pos.y * 11.5);
+      this.ctx.fillText(
+        `Active Cell: ${this.activeIndex.value}`,
+        pos.x,
+        pos.y * 11.5
+      );
       this.ctx.fillText(`Hovered Cell: ${this.hoveredCell}`, pos.x, pos.y * 13);
       this.ctx.restore;
     }
@@ -430,7 +437,7 @@ class CanvasAnimation {
         Math.abs(this.pressStartPoint.x - x) > 20 ||
         Math.abs(this.pressStartPoint.y - y) > 20
       ) {
-        this.activeCell = null;
+        this.setActiveIndex(null);
       }
     }
 
@@ -487,8 +494,8 @@ class CanvasAnimation {
       canvasMousePoint.y > posY + this.cell.outerPadding &&
       canvasMousePoint.y < posY + (this.cell.height - this.cell.outerPadding);
 
-    if (isHoveredX && isHoveredY) this.activeCell = hoveredCell.index;
-    else if (this.activeCell !== null) this.activeCell = null;
+    if (isHoveredX && isHoveredY) this.setActiveIndex(hoveredCell.index);
+    else this.setActiveIndex(null);
   }
 
   public onWheel(deltaX: number, deltaY: number) {
@@ -505,6 +512,11 @@ class CanvasAnimation {
       opacity: 1,
       scale: 1,
     }));
+  }
+
+  public setActiveIndex(nextIndex: number | null) {
+    if (nextIndex === null && this.activeIndex.value === null) return;
+    this.activeIndex.value = nextIndex;
   }
 }
 
