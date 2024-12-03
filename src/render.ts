@@ -515,7 +515,6 @@ class CanvasAnimation {
   }
 
   public setActiveIndex(nextIndex: number | null) {
-    if (nextIndex === null && this.activeIndex.value === null) return;
     this.activeIndex.value = nextIndex;
   }
 }

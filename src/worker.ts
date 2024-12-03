@@ -1,9 +1,10 @@
 import CanvasAnimation from "./render";
 import type {
+  GridItem,
+  Vec2,
   OffscreenCanvasInit,
   OffscreenCanvasMessageEvent,
-} from "./send-to-worker";
-import type { GridItem, Vec2 } from "./types";
+} from "./types";
 
 class OffscreenCanvasRenderer {
   private canvas: OffscreenCanvas | null = null;
@@ -57,6 +58,10 @@ class OffscreenCanvasRenderer {
     this.animation?.onImagesLoaded(images);
   }
 
+  public onActiveIndexChange(index: number | null) {
+    this.animation?.setActiveIndex(index);
+  }
+
   public resize(width: number, height: number) {
     if (!this.canvas || !this.ctx) return;
 
@@ -99,5 +104,7 @@ function handleOffscreenCanvasMessage({ data }: OffscreenCanvasMessageEvent) {
     renderer.resize(data.width, data.height);
   } else if (data.type === "image") {
     renderer.onImageLoaded(data.images);
+  } else if (data.type === "activeIndexChange") {
+    renderer.onActiveIndexChange(data.index);
   }
 }

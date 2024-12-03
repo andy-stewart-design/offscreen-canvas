@@ -1,3 +1,4 @@
+// MARK: Generic types ---------------------------------------------------------
 interface Vec2 {
   x: number;
   y: number;
@@ -16,6 +17,7 @@ interface Box {
   height: number;
 }
 
+// MARK: Grid types -----------------------------------------------------
 interface GridItemSource {
   type: "product" | "influencer";
   title: string;
@@ -30,4 +32,80 @@ interface GridItem {
   element: GridImage;
 }
 
-export type { Vec2, Vec3, Box, GridImage, GridItem, GridItemSource };
+// MARK: Offscreen Canvas types -----------------------------------------------------
+interface OffscreenCanvasInit {
+  type: "init";
+  canvas: OffscreenCanvas;
+  dpr: number;
+}
+
+interface OffscreenCanvasMoveEvent {
+  type: "mouseMove";
+  x: number;
+  y: number;
+}
+
+interface OffscreenCanvasPressEvent {
+  type: "pressStart" | "pressEnd";
+  isPressed: boolean;
+  x?: number;
+  y?: number;
+}
+
+interface OffscreenCanvasClickEvent {
+  type: "click";
+  x: number;
+  y: number;
+}
+
+interface OffscreenCanvasWheelEvent {
+  type: "wheel";
+  deltaX: number;
+  deltaY: number;
+}
+
+interface OffscreenCanvasResizeEvent {
+  type: "resize";
+  width: number;
+  height: number;
+}
+
+interface OffscreenCanvasResizeEvent {
+  type: "resize";
+  width: number;
+  height: number;
+}
+
+interface OffscreenCanvasImageEvent {
+  type: "image";
+  images: Array<GridItem>;
+}
+
+interface OffscreenCanvasActiveIndeChangeEvent {
+  type: "activeIndexChange";
+  index: number | null;
+}
+
+type OffscreenCanvasMessage =
+  | OffscreenCanvasInit
+  | OffscreenCanvasMoveEvent
+  | OffscreenCanvasPressEvent
+  | OffscreenCanvasClickEvent
+  | OffscreenCanvasWheelEvent
+  | OffscreenCanvasResizeEvent
+  | OffscreenCanvasImageEvent
+  | OffscreenCanvasActiveIndeChangeEvent;
+
+type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
+
+export type {
+  Vec2,
+  Vec3,
+  Box,
+  GridImage,
+  GridItem,
+  GridItemSource,
+  OffscreenCanvasInit,
+  OffscreenCanvasMessageEvent,
+  OffscreenCanvasMessage,
+};

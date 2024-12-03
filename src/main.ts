@@ -1,14 +1,13 @@
 import CanvasAnimation from "./render";
 import OffscreenCanvasWorker from "./worker?worker";
-import { OffscreenCanvasMessage } from "./send-to-worker";
 import { getPressPoint } from "./utils/get-press-point";
 import { getDpr } from "./utils/device-pixel-ratio";
 import { IMAGE_SOURCES } from "./images";
 import { createArray } from "./utils/array";
-import type { GridItem, GridItemSource } from "./types";
+import type { GridItem, GridItemSource, OffscreenCanvasMessage } from "./types";
 import { isNonNullArray } from "./utils/null-check";
-import "./main.css";
 import ObservableValue from "./observable";
+import "./main.css";
 
 class HTMLCanvasRenderer {
   private canvasEl: HTMLCanvasElement;
@@ -270,6 +269,14 @@ class HTMLCanvasRenderer {
     this.animation?.onResize(width, height);
   }
 
+  public setActiveIndex(index: number | null) {
+    if (this.isOffscreen) {
+      this.sendToWorker({ type: "activeIndexChange", index });
+    } else {
+      this.animation?.setActiveIndex(index);
+    }
+  }
+
   public destroy() {
     this.removeEventListeners();
     this.resizeObserver.unobserve(this.canvasEl);
@@ -293,4 +300,9 @@ canvasRenderer.isLoaded.subscribe((isLoaded) => {
 });
 canvasRenderer.activeIndex.subscribe((index) => {
   console.log("The active index is: ", index);
+});
+
+const button = document.querySelector("button");
+button?.addEventListener("click", () => {
+  canvasRenderer.setActiveIndex(null);
 });

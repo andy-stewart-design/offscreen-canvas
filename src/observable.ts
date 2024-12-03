@@ -13,8 +13,10 @@ class ObservableValue<T> {
   }
 
   set value(newValue: T) {
-    if (this._value !== newValue) this._value = newValue;
-    this.emit(newValue);
+    if (this._value !== newValue) {
+      this._value = newValue;
+      this.emit(newValue);
+    }
   }
 
   private emit(data: T): void {
