@@ -59,6 +59,9 @@ class HTMLCanvasRenderer {
       this.worker.onmessage = (e) => {
         if (e.data.type === "activeIndex") {
           this.activeIndex.value = e.data.index;
+        } else if (e.data.type === "hoveredIndex") {
+          if (e.data.index === null) this.canvasEl.style.cursor = "default";
+          else this.canvasEl.style.cursor = "pointer";
         }
       };
 
@@ -82,7 +85,10 @@ class HTMLCanvasRenderer {
       this.animation.activeIndex.subscribe((next) => {
         this.activeIndex.value = next;
       });
-
+      this.animation.hoveredCell.subscribe((next) => {
+        if (next === null) this.canvasEl.style.cursor = "default";
+        else this.canvasEl.style.cursor = "pointer";
+      });
       this.render(0);
     }
   }
@@ -294,10 +300,13 @@ const canvasRenderer = new HTMLCanvasRenderer(
   window.innerWidth,
   window.innerHeight
 );
+
 canvasRenderer.appendTo(app);
+
 canvasRenderer.isLoaded.subscribe((isLoaded) => {
   console.log("The scene is loaded: ", isLoaded);
 });
+
 canvasRenderer.activeIndex.subscribe((index) => {
   console.log("The active index is: ", index);
 });

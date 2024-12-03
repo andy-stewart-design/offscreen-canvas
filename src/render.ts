@@ -24,7 +24,7 @@ class CanvasAnimation {
   private pressStartPoint: Vec2 = { x: 0, y: 0 };
   private velocity: Vec2 = { x: 0, y: 0 };
   public activeIndex = new ObservableValue<number | null>(null);
-  private hoveredCell: number | null = null;
+  public hoveredCell = new ObservableValue<number | null>(null);
   private images: Array<StyledGridItem> | null = null;
 
   private framerate = 0;
@@ -109,7 +109,11 @@ class CanvasAnimation {
         pos.x,
         pos.y * 11.5
       );
-      this.ctx.fillText(`Hovered Cell: ${this.hoveredCell}`, pos.x, pos.y * 13);
+      this.ctx.fillText(
+        `Hovered Cell: ${this.hoveredCell.value}`,
+        pos.x,
+        pos.y * 13
+      );
       this.ctx.restore;
     }
   }
@@ -242,7 +246,7 @@ class CanvasAnimation {
 
   private setImageStyles(img: StyledGridItem, i: number) {
     if (this.hoveredCell !== null) {
-      if (i === this.hoveredCell) {
+      if (i === this.hoveredCell.value) {
         img.opacity = lerp(img.opacity, 0.5, easeOutCubic(0.1));
         img.scale = lerp(img.scale, 1.1, easeOutQuart(0.1));
       } else {
@@ -452,8 +456,8 @@ class CanvasAnimation {
       canvasMousePoint.y > posY + this.cell.outerPadding &&
       canvasMousePoint.y < posY + (this.cell.height - this.cell.outerPadding);
 
-    if (isHoveredX && isHoveredY) this.hoveredCell = hoveredCell.index;
-    else if (this.hoveredCell !== null) this.hoveredCell = null;
+    if (isHoveredX && isHoveredY) this.hoveredCell.value = hoveredCell.index;
+    else if (this.hoveredCell.value !== null) this.hoveredCell.value = null;
   }
 
   public onPress(

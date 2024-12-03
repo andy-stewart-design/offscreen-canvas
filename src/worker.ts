@@ -35,6 +35,10 @@ class OffscreenCanvasRenderer {
       self.postMessage({ type: "activeIndex", index })
     );
 
+    this.animation.hoveredCell.subscribe((index) => {
+      self.postMessage({ type: "hoveredIndex", index });
+    });
+
     this.render(0);
   }
 
