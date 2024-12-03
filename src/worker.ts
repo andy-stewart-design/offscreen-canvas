@@ -13,7 +13,7 @@ class OffscreenCanvasRenderer {
   private rafId = 0;
   private dpr = 1;
 
-  public init({ canvas, dpr }: OffscreenCanvasInit) {
+  public init({ canvas, cols, rows, dpr }: OffscreenCanvasInit) {
     this.canvas = canvas;
     this.dpr = dpr;
 
@@ -28,14 +28,15 @@ class OffscreenCanvasRenderer {
       this.ctx,
       this.canvas.width,
       this.canvas.height,
-      100
+      cols,
+      rows
     );
 
     this.animation.activeIndex.subscribe((index) =>
       self.postMessage({ type: "activeIndex", index })
     );
 
-    this.animation.hoveredCell.subscribe((index) => {
+    this.animation.hoveredIndex.subscribe((index) => {
       self.postMessage({ type: "hoveredIndex", index });
     });
 
@@ -56,6 +57,10 @@ class OffscreenCanvasRenderer {
 
   public onWheel(deltaX: number, deltaY: number) {
     this.animation?.onWheel(deltaX, deltaY);
+  }
+
+  public onFocus(isFocused: boolean, focusIndex: number) {
+    this.animation?.onFocus(isFocused, focusIndex);
   }
 
   public onImageLoaded(images: Array<GridItem>) {
@@ -110,5 +115,7 @@ function handleOffscreenCanvasMessage({ data }: OffscreenCanvasMessageEvent) {
     renderer.onImageLoaded(data.images);
   } else if (data.type === "activeIndexChange") {
     renderer.onActiveIndexChange(data.index);
+  } else if (data.type === "focus") {
+    renderer.onFocus(data.isFocused, data.focusIndex);
   }
 }

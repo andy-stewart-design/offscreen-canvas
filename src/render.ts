@@ -1,7 +1,6 @@
-import { getGridDimensions } from "./utils/grid-dimensions";
+import ObservableValue from "./observable";
 import { easeOutCubic, easeOutQuart, lerp } from "./utils/easings";
 import type { Box, GridItem, Vec2, Vec3 } from "./types";
-import ObservableValue from "./observable";
 
 type CanvasAnimationContext =
   | CanvasRenderingContext2D
@@ -20,12 +19,15 @@ class CanvasAnimation {
   private grid: { cols: number; rows: number };
   private cell = { width: 0, height: 0, outerPadding: 0, innerPadding: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
+  private images: Array<StyledGridItem> | null = null;
 
   private pressStartPoint: Vec2 = { x: 0, y: 0 };
   private velocity: Vec2 = { x: 0, y: 0 };
+  private hasResized = false;
+  private isFocused = false;
+  private focusedIndex = 0;
   public activeIndex = new ObservableValue<number | null>(null);
-  public hoveredCell = new ObservableValue<number | null>(null);
-  private images: Array<StyledGridItem> | null = null;
+  public hoveredIndex = new ObservableValue<number | null>(null);
 
   private framerate = 0;
   private prevTime = 0;
@@ -34,7 +36,7 @@ class CanvasAnimation {
   private isPressed = false;
 
   private debugConfig = {
-    show: true,
+    show: false,
     pos: { x: 10, y: 13 },
     fontSize: 13,
   };
@@ -43,12 +45,12 @@ class CanvasAnimation {
     ctx: CanvasAnimationContext,
     width: number,
     height: number,
-    numItems: number
+    cols: number,
+    rows: number
   ) {
     this.ctx = ctx;
     this.isOffscreen = this.ctx instanceof OffscreenCanvasRenderingContext2D;
     this.resize(width, height);
-    const [cols, rows] = getGridDimensions(numItems);
     this.grid = { cols, rows };
   }
 
@@ -70,7 +72,7 @@ class CanvasAnimation {
       this.ctx.save();
       this.ctx.font = `300 ${fontSize}px system-ui`;
       this.ctx.fillStyle = "rgb(0 0 0 / 0.75)";
-      this.ctx.fillRect(0, 0, 264, 188);
+      this.ctx.fillRect(0, 0, 264, 204);
       this.ctx.fillStyle = "#efefef";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
@@ -110,9 +112,14 @@ class CanvasAnimation {
         pos.y * 11.5
       );
       this.ctx.fillText(
-        `Hovered Cell: ${this.hoveredCell.value}`,
+        `Hovered Cell: ${this.hoveredIndex.value}`,
         pos.x,
         pos.y * 13
+      );
+      this.ctx.fillText(
+        `Focused Cell: ${this.focusedIndex}, ${this.isFocused}`,
+        pos.x,
+        pos.y * 14.5
       );
       this.ctx.restore;
     }
@@ -176,8 +183,41 @@ class CanvasAnimation {
     };
   }
 
+  private virtualizeCell(i: number) {
+    const { width, height } = this.cell;
+    const colIndex = i % this.grid.cols;
+    const rowIndex = Math.floor(i / this.grid.cols);
+
+    const cellMinX = this.camera.x + colIndex * width;
+    const cellMinY = this.camera.y + rowIndex * height;
+    const shiftX =
+      cellMinX + width < 0
+        ? this.canvas.width
+        : cellMinX > this.viewport.width + this.cell.width
+        ? -this.canvas.width
+        : 0;
+    const shiftY =
+      cellMinY + height < 0
+        ? this.canvas.height
+        : cellMinY > this.viewport.height + this.cell.height
+        ? -this.canvas.height
+        : 0;
+
+    const isVisibleX =
+      shiftX + cellMinX + width < this.viewport.width + this.cell.width;
+    const isVisibleY =
+      shiftY + cellMinY + height < this.viewport.height + this.cell.height;
+
+    return {
+      isVisible: isVisibleX && isVisibleY,
+      shiftX,
+      shiftY,
+    };
+  }
+
   private resize(width: number, height: number) {
     if (!this.grid) return;
+
     this.viewport = {
       minX: -this.camera.x,
       minY: -this.camera.y,
@@ -204,6 +244,10 @@ class CanvasAnimation {
       width: this.cell.width * this.grid.cols,
       height: this.cell.height * this.grid.rows,
     };
+    if (!this.hasResized) {
+      this.hasResized = true;
+      this.centerCell(this.focusedIndex);
+    }
   }
 
   private renderImage(
@@ -244,22 +288,170 @@ class CanvasAnimation {
     );
   }
 
-  private setImageStyles(img: StyledGridItem, i: number) {
-    if (this.hoveredCell !== null) {
-      if (i === this.hoveredCell.value) {
-        img.opacity = lerp(img.opacity, 0.5, easeOutCubic(0.1));
-        img.scale = lerp(img.scale, 1.1, easeOutQuart(0.1));
+  private renderFocusOutline(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number
+  ) {
+    this.ctx.save();
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeStyle = "#275dc5";
+    this.ctx.beginPath();
+    this.ctx.roundRect(x, y, w, h, r);
+    this.ctx.stroke();
+    this.ctx.closePath();
+    this.ctx.restore();
+  }
+
+  private renderCell(
+    image: StyledGridItem | undefined,
+    i: number,
+    shiftX: number,
+    shiftY: number
+  ) {
+    const colIndex = i % this.grid.cols;
+    const rowIndex = Math.floor(i / this.grid.cols);
+    const cellX = colIndex * this.cell.width + shiftX;
+    const cellY = rowIndex * this.cell.height + shiftY;
+    const outerW =
+      (this.cell.width - this.cell.outerPadding * 2) * (image?.scale ?? 1);
+    const outerH =
+      (this.cell.height - this.cell.outerPadding * 2) * (image?.scale ?? 1);
+    const outerX = cellX + (this.cell.width - outerW) / 2;
+    const outerY = cellY + (this.cell.height - outerH) / 2;
+
+    if (this.isFocused && i === this.focusedIndex) {
+      this.renderFocusOutline(
+        outerX - 4,
+        outerY - 4,
+        outerW + 4 * 2,
+        outerH + 4 * 2,
+        24 + 4
+      );
+    }
+
+    this.ctx.globalAlpha = image?.opacity ?? 1;
+
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.fillStyle = "#F7F7F7";
+    this.ctx.roundRect(outerX, outerY, outerW, outerH, 24);
+    if (!image || image.type === "product") this.ctx.fill();
+    this.ctx.closePath();
+
+    if (image) {
+      if (image.type === "influencer") {
+        this.ctx.clip();
+        this.renderImage(image.element, outerX, outerY, outerW, outerH);
       } else {
-        if (img.opacity === 1 && img.scale === 1) return;
-        img.opacity = lerp(img.opacity, 1.0, easeOutCubic(0.1));
-        img.scale = lerp(img.scale, 1.0, easeOutQuart(0.1));
+        this.ctx.save();
+        const imgAspectRatio = image.element.height / image.element.width;
+        const maxAspectRatio = (outerH * 1.25) / outerW;
+        const finalAspectRatio = Math.min(imgAspectRatio, maxAspectRatio);
+        const innerW =
+          outerW - (this.cell.innerPadding - this.cell.outerPadding) * 2;
+        const innerH = innerW * finalAspectRatio;
+        const innerX = outerX + this.cell.innerPadding - this.cell.outerPadding;
+        const innerY = outerY + (outerH - innerH) / 2;
+
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "#EFEFEF";
+        this.ctx.roundRect(innerX, innerY, innerW, innerH, 8);
+        this.ctx.closePath();
+        this.ctx.clip();
+        this.renderImage(image.element, innerX, innerY, innerW, innerH);
+        this.ctx.restore();
       }
+
+      const titleOpacity = Number(((1 - image.opacity) * 2).toFixed(2));
+
+      if (titleOpacity > 0.05) {
+        this.ctx.font = `${12 * image.scale}px Market Sans`;
+        const maxLetters = Math.floor(
+          (outerW - 48) / this.ctx.measureText("0").width
+        );
+        const title =
+          image.title.length > maxLetters
+            ? `${image.title.slice(0, maxLetters).trim()}…`
+            : image.title;
+        const { width } = this.ctx.measureText(title);
+        this.ctx.globalAlpha = Number(titleOpacity);
+        this.ctx.fillStyle = "#FFF";
+        this.ctx.beginPath();
+        this.ctx.shadowColor =
+          image.type === "product" ? "rgb(0 0 0 / 0.05)" : "rgb(0 0 0 / 0.25)";
+        this.ctx.shadowBlur = 24;
+        this.ctx.shadowOffsetY = 10;
+        this.ctx.roundRect(
+          outerX + (outerW - width - 40) / 2,
+          outerY + outerH - 60,
+          width + 40,
+          36,
+          20
+        );
+        this.ctx.fill();
+        this.ctx.closePath();
+        this.ctx.shadowColor = "transparent";
+        this.ctx.shadowOffsetY = 0;
+        this.ctx.fillStyle = "#8f8f8f";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText(title, outerX + outerW / 2, outerY + outerH - 41);
+      }
+
+      if (this.debugConfig.show || this.isFocused) {
+        this.ctx.globalAlpha = 1;
+        this.ctx.fillStyle = this.isFocused ? "#275dc5" : "rgb(0 0 0 / 0.5)";
+        this.ctx.beginPath();
+        this.ctx.ellipse(outerX + 32, outerY + 32, 16, 16, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.closePath();
+        this.ctx.font = `300 13px system-ui`;
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillStyle = "white";
+        this.ctx.fillText(i.toString(), outerX + 32, outerY + 32.25);
+      }
+    }
+    this.ctx.restore();
+  }
+
+  private setImageStyles(img: StyledGridItem, i: number) {
+    if (this.hoveredIndex !== null && i === this.hoveredIndex.value) {
+      img.opacity = lerp(img.opacity, 0.5, easeOutCubic(0.1));
+      img.scale = lerp(img.scale, 1.1, easeOutQuart(0.1));
+    } else if (this.isFocused && i === this.focusedIndex) {
+      img.opacity = lerp(img.opacity, 0.5, easeOutCubic(0.1));
+      img.scale = lerp(img.scale, 1.1, easeOutQuart(0.1));
     } else {
       if (img.opacity === 1 && img.scale === 1) return;
-
       img.opacity = lerp(img.opacity, 1.0, easeOutCubic(0.1));
       img.scale = lerp(img.scale, 1.0, easeOutQuart(0.1));
     }
+  }
+
+  public centerCell(absIndex: number): void {
+    if (!this.canvas || !this.viewport) return;
+    const colIndex = absIndex % this.grid.cols;
+    const rowIndex = Math.floor(absIndex / this.grid.cols);
+
+    const posX =
+      this.canvas.width -
+      this.viewport.width / 2 +
+      (this.cell.width * (colIndex + 1) - this.cell.width / 2);
+
+    const posY =
+      this.canvas.height -
+      this.viewport.height / 2 +
+      (this.cell.height * (rowIndex + 1) - this.cell.height / 2);
+
+    this.camera = {
+      x: -posX % this.canvas.width,
+      y: -posY % this.canvas.height,
+      z: 1,
+    };
   }
 
   public render(timestamp: number) {
@@ -275,139 +467,10 @@ class CanvasAnimation {
     for (let i = 0; i < this.grid.cols * this.grid.rows; i++) {
       const image = this.images?.[i];
       if (image) this.setImageStyles(image, i);
-      const colIndex = i % this.grid.cols;
-      const rowIndex = Math.floor(i / this.grid.cols);
-      const { width, height } = this.cell;
 
-      //  MARK: Virtualize rendering ---------------------------------------------
-      const cellMinX = this.camera.x + colIndex * width;
-      const cellMinY = this.camera.y + rowIndex * height;
-      const shiftX =
-        cellMinX + width < 0
-          ? this.canvas.width
-          : cellMinX > this.viewport.width + this.cell.width
-          ? -this.canvas.width
-          : 0;
-      const shiftY =
-        cellMinY + height < 0
-          ? this.canvas.height
-          : cellMinY > this.viewport.height + this.cell.height
-          ? -this.canvas.height
-          : 0;
-
-      const isVisibleX =
-        shiftX + cellMinX + width < this.viewport.width + this.cell.width;
-      const isVisibleY =
-        shiftY + cellMinY + height < this.viewport.height + this.cell.height;
-
-      if (!isVisibleX || !isVisibleY) continue;
-
-      //  MARK: Render visible cells ---------------------------------------------
-      this.ctx.globalAlpha = image?.opacity ?? 1;
-      const cellX = colIndex * this.cell.width + shiftX;
-      const cellY = rowIndex * this.cell.height + shiftY;
-      const outerW =
-        (this.cell.width - this.cell.outerPadding * 2) * (image?.scale ?? 1);
-      const outerH =
-        (this.cell.height - this.cell.outerPadding * 2) * (image?.scale ?? 1);
-      const outerX = cellX + (this.cell.width - outerW) / 2;
-      const outerY = cellY + (this.cell.height - outerH) / 2;
-
-      this.ctx.save();
-      this.ctx.beginPath();
-      this.ctx.fillStyle = "#F7F7F7";
-      this.ctx.roundRect(outerX, outerY, outerW, outerH, 24);
-      if (!image || image.type === "product") this.ctx.fill();
-      this.ctx.closePath();
-
-      if (image) {
-        if (image.type === "influencer") {
-          this.ctx.clip();
-          this.renderImage(image.element, outerX, outerY, outerW, outerH);
-        } else {
-          this.ctx.save();
-          const imgAspectRatio = image.element.height / image.element.width;
-          const maxAspectRatio = (outerH * 1.25) / outerW;
-          const finalAspectRatio = Math.min(imgAspectRatio, maxAspectRatio);
-          const innerW =
-            outerW - (this.cell.innerPadding - this.cell.outerPadding) * 2;
-          const innerH = innerW * finalAspectRatio;
-          const innerX =
-            outerX + this.cell.innerPadding - this.cell.outerPadding;
-          const innerY = outerY + (outerH - innerH) / 2;
-
-          this.ctx.beginPath();
-          this.ctx.fillStyle = "#EFEFEF";
-          this.ctx.roundRect(innerX, innerY, innerW, innerH, 8);
-          this.ctx.closePath();
-          this.ctx.clip();
-          this.renderImage(image.element, innerX, innerY, innerW, innerH);
-          this.ctx.restore();
-        }
-
-        const titleOpacity = Number(((1 - image.opacity) * 2).toFixed(2));
-
-        if (titleOpacity > 0.05) {
-          this.ctx.font = `${12 * image.scale}px Market Sans`;
-          const maxLetters = Math.floor(
-            (outerW - 48) / this.ctx.measureText("0").width
-          );
-          const title =
-            image.title.length > maxLetters
-              ? `${image.title.slice(0, maxLetters).trim()}…`
-              : image.title;
-          const { width } = this.ctx.measureText(title);
-          this.ctx.globalAlpha = Number(titleOpacity);
-          this.ctx.fillStyle = "#FFF";
-          this.ctx.beginPath();
-          this.ctx.shadowColor =
-            image.type === "product"
-              ? "rgb(0 0 0 / 0.05)"
-              : "rgb(0 0 0 / 0.25)";
-          this.ctx.shadowBlur = 24;
-          this.ctx.shadowOffsetY = 10;
-          this.ctx.roundRect(
-            outerX + (outerW - width - 40) / 2,
-            outerY + outerH - 60,
-            width + 40,
-            36,
-            20
-          );
-          this.ctx.fill();
-          this.ctx.closePath();
-          this.ctx.shadowColor = "transparent";
-          this.ctx.shadowOffsetY = 0;
-          this.ctx.fillStyle = "#8f8f8f";
-          this.ctx.textAlign = "center";
-          this.ctx.textBaseline = "middle";
-          this.ctx.fillText(title, outerX + outerW / 2, outerY + outerH - 41);
-        }
-      }
-      this.ctx.restore();
-
-      if (this.debugConfig.show) {
-        this.ctx.globalAlpha = 1;
-        this.ctx.fillStyle = "rgb(0 0 0 / 0.5)";
-        this.ctx.beginPath();
-        this.ctx.ellipse(
-          colIndex * width + shiftX + this.cell.innerPadding,
-          rowIndex * height + shiftY + this.cell.innerPadding,
-          16,
-          16,
-          0,
-          0,
-          Math.PI * 2
-        );
-        this.ctx.fill();
-        this.ctx.closePath();
-        this.ctx.font = `300 13px system-ui`;
-        this.ctx.textAlign = "center";
-        this.ctx.fillStyle = "white";
-        this.ctx.fillText(
-          i.toString(),
-          colIndex * width + shiftX + this.cell.innerPadding,
-          rowIndex * height + shiftY + this.cell.innerPadding
-        );
+      const { isVisible, shiftX, shiftY } = this.virtualizeCell(i);
+      if (isVisible) {
+        this.renderCell(image, i, shiftX, shiftY);
       }
     }
 
@@ -456,8 +519,8 @@ class CanvasAnimation {
       canvasMousePoint.y > posY + this.cell.outerPadding &&
       canvasMousePoint.y < posY + (this.cell.height - this.cell.outerPadding);
 
-    if (isHoveredX && isHoveredY) this.hoveredCell.value = hoveredCell.index;
-    else if (this.hoveredCell.value !== null) this.hoveredCell.value = null;
+    if (isHoveredX && isHoveredY) this.hoveredIndex.value = hoveredCell.index;
+    else if (this.hoveredIndex.value !== null) this.hoveredIndex.value = null;
   }
 
   public onPress(
@@ -500,6 +563,13 @@ class CanvasAnimation {
 
     if (isHoveredX && isHoveredY) this.setActiveIndex(hoveredCell.index);
     else this.setActiveIndex(null);
+  }
+
+  public onFocus(isFocused: boolean, focusIndex: number) {
+    this.isFocused = isFocused;
+    this.focusedIndex = focusIndex;
+
+    if (isFocused) this.centerCell(focusIndex);
   }
 
   public onWheel(deltaX: number, deltaY: number) {

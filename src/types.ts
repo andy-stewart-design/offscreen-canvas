@@ -36,6 +36,8 @@ interface GridItem {
 interface OffscreenCanvasInit {
   type: "init";
   canvas: OffscreenCanvas;
+  cols: number;
+  rows: number;
   dpr: number;
 }
 
@@ -64,10 +66,10 @@ interface OffscreenCanvasWheelEvent {
   deltaY: number;
 }
 
-interface OffscreenCanvasResizeEvent {
-  type: "resize";
-  width: number;
-  height: number;
+interface OffscreenCanvasFocusEvent {
+  type: "focus";
+  isFocused: boolean;
+  focusIndex: number;
 }
 
 interface OffscreenCanvasResizeEvent {
@@ -92,6 +94,7 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasPressEvent
   | OffscreenCanvasClickEvent
   | OffscreenCanvasWheelEvent
+  | OffscreenCanvasFocusEvent
   | OffscreenCanvasResizeEvent
   | OffscreenCanvasImageEvent
   | OffscreenCanvasActiveIndeChangeEvent;

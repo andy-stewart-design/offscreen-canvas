@@ -1,12 +1,13 @@
 import CanvasAnimation from "./render";
 import OffscreenCanvasWorker from "./worker?worker";
+import ObservableValue from "./observable";
 import { getPressPoint } from "./utils/get-press-point";
 import { getDpr } from "./utils/device-pixel-ratio";
 import { IMAGE_SOURCES } from "./images";
 import { createArray } from "./utils/array";
-import type { GridItem, GridItemSource, OffscreenCanvasMessage } from "./types";
 import { isNonNullArray } from "./utils/null-check";
-import ObservableValue from "./observable";
+import { getGridDimensions } from "./utils/grid-dimensions";
+import type { GridItem, GridItemSource, OffscreenCanvasMessage } from "./types";
 import "./main.css";
 
 class HTMLCanvasRenderer {
@@ -15,8 +16,14 @@ class HTMLCanvasRenderer {
   private worker: Worker | null;
   private animation: CanvasAnimation | null;
   private isOffscreen: boolean;
+  private grid: { cols: number; rows: number };
 
-  private imageSources: Array<GridItemSource> = IMAGE_SOURCES;
+  private isFocused = false;
+  private focusedIndex = 0;
+  private globalShiftKey = false;
+  private globalTabKey = false;
+
+  private imageSources: Array<GridItemSource>;
   private images: Array<GridItem | null> = createArray(
     null,
     IMAGE_SOURCES.length
@@ -35,21 +42,21 @@ class HTMLCanvasRenderer {
   private boundHandleClick: (e: MouseEvent | TouchEvent) => void;
   private boundHandleMouseOut: () => void;
   private boundHandleWheel: (e: WheelEvent) => void;
+  private boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private boundHandleFocus: () => void;
+  private boundHandleGlobalKeyEvent: (e: KeyboardEvent) => void;
+  private boundHandleGlobalVisChangeEvent: () => void;
 
   constructor(defaultWidth: number, defaultHeight: number) {
     this.isOffscreen = typeof window.OffscreenCanvas === "function";
-    // this.isOffscreen = false;
     this.canvasEl = document.createElement("canvas");
+    this.canvasEl.tabIndex = 1;
     this.dpr = getDpr();
+    const [cols, rows] = getGridDimensions(this.images.length);
+    this.grid = { cols, rows };
+    this.imageSources = IMAGE_SOURCES.slice(0, cols * rows);
     this.init(defaultWidth, defaultHeight);
 
-    this.resizeObserver = this.createResizeObserver();
-    this.boundHandlePressStart = this.handlePressStart.bind(this);
-    this.boundHandleMove = this.handleMove.bind(this);
-    this.boundHandlePressEnd = this.handlePressEnd.bind(this);
-    this.boundHandleClick = this.handleClick.bind(this);
-    this.boundHandleMouseOut = this.handleMouseOut.bind(this);
-    this.boundHandleWheel = this.handleWheel.bind(this);
     this.addEventListeners();
 
     if (this.isOffscreen) {
@@ -59,6 +66,7 @@ class HTMLCanvasRenderer {
       this.worker.onmessage = (e) => {
         if (e.data.type === "activeIndex") {
           this.activeIndex.value = e.data.index;
+          if (e.data.index !== null) this.focusedIndex = e.data.index;
         } else if (e.data.type === "hoveredIndex") {
           if (e.data.index === null) this.canvasEl.style.cursor = "default";
           else this.canvasEl.style.cursor = "pointer";
@@ -69,6 +77,8 @@ class HTMLCanvasRenderer {
       this.sendToWorker({
         type: "init",
         canvas: offscreen,
+        cols,
+        rows,
         dpr: this.dpr,
       });
     } else {
@@ -80,12 +90,14 @@ class HTMLCanvasRenderer {
         this.ctx,
         defaultWidth,
         defaultHeight,
-        IMAGE_SOURCES.length
+        cols,
+        rows
       );
       this.animation.activeIndex.subscribe((next) => {
         this.activeIndex.value = next;
+        if (next !== null) this.focusedIndex = next;
       });
-      this.animation.hoveredCell.subscribe((next) => {
+      this.animation.hoveredIndex.subscribe((next) => {
         if (next === null) this.canvasEl.style.cursor = "default";
         else this.canvasEl.style.cursor = "pointer";
       });
@@ -109,6 +121,18 @@ class HTMLCanvasRenderer {
       this.worker.postMessage({ ...props, canvas }, [canvas]);
     } else {
       this.worker.postMessage(msg);
+    }
+  }
+
+  private sendFocusToWorker() {
+    if (this.isOffscreen) {
+      this.sendToWorker({
+        type: "focus",
+        isFocused: this.isFocused,
+        focusIndex: this.focusedIndex,
+      });
+    } else {
+      this.animation?.onFocus(this.isFocused, this.focusedIndex);
     }
   }
 
@@ -155,6 +179,10 @@ class HTMLCanvasRenderer {
       });
     } else {
       this.animation?.onPress(true, x, y);
+    }
+    if (this.isFocused) {
+      this.isFocused = false;
+      this.sendFocusToWorker();
     }
   }
 
@@ -212,6 +240,75 @@ class HTMLCanvasRenderer {
     } else {
       this.animation?.onWheel(e.deltaX, e.deltaY);
     }
+
+    if (this.isFocused) {
+      this.isFocused = false;
+      this.sendFocusToWorker();
+    }
+  }
+
+  private handleKeyDown(e: KeyboardEvent) {
+    const maxIndex = this.grid.cols * this.grid.rows - 1;
+    if (e.key === "Tab") {
+      if (this.globalShiftKey && this.focusedIndex > 0) {
+        e.preventDefault();
+        this.isFocused = true;
+        this.focusedIndex--;
+      } else if (!this.globalShiftKey && this.focusedIndex < maxIndex) {
+        e.preventDefault();
+        this.isFocused = true;
+        this.focusedIndex++;
+      } else {
+        this.isFocused = false;
+      }
+    } else if (e.key === "ArrowDown") {
+      this.focusedIndex =
+        (this.focusedIndex + this.grid.cols) %
+        (this.grid.cols * this.grid.rows);
+    } else if (e.key === "ArrowUp") {
+      if (this.focusedIndex - this.grid.cols < 0) {
+        const remainder = this.grid.cols - this.focusedIndex - 1;
+        this.focusedIndex = maxIndex - remainder;
+      } else {
+        this.focusedIndex = this.focusedIndex - this.grid.cols;
+      }
+    } else if (e.key === "ArrowRight") {
+      const rowIndex = Math.floor(this.focusedIndex / this.grid.cols);
+      const startValue = rowIndex * this.grid.cols;
+      const endValue = startValue + this.grid.cols - 1;
+
+      if (this.focusedIndex < endValue) this.focusedIndex++;
+      else this.focusedIndex = startValue;
+    } else if (e.key === "ArrowLeft") {
+      const rowIndex = Math.floor(this.focusedIndex / this.grid.cols);
+      const startValue = rowIndex * this.grid.cols;
+      const endValue = startValue + this.grid.cols - 1;
+
+      if (this.focusedIndex > startValue) this.focusedIndex--;
+      else this.focusedIndex = endValue;
+    }
+    this.sendFocusToWorker();
+  }
+
+  private handleFocus() {
+    this.isFocused = this.canvasEl.matches(":focus-visible");
+
+    if (this.globalShiftKey) {
+      this.focusedIndex = this.grid.cols * this.grid.rows - 1;
+      this.sendFocusToWorker();
+    } else if (this.globalTabKey) {
+      this.focusedIndex = 0;
+      this.sendFocusToWorker();
+    }
+  }
+
+  private handleGlobalKeyEvent(e: KeyboardEvent) {
+    this.globalShiftKey = e.shiftKey;
+    this.globalTabKey = e.key === "Tab";
+  }
+
+  private handleGlobalVisChange() {
+    if (document.hidden) this.globalTabKey = false;
   }
 
   private createResizeObserver() {
@@ -237,6 +334,19 @@ class HTMLCanvasRenderer {
   }
 
   private addEventListeners() {
+    this.resizeObserver = this.createResizeObserver();
+    this.boundHandlePressStart = this.handlePressStart.bind(this);
+    this.boundHandleMove = this.handleMove.bind(this);
+    this.boundHandlePressEnd = this.handlePressEnd.bind(this);
+    this.boundHandleClick = this.handleClick.bind(this);
+    this.boundHandleMouseOut = this.handleMouseOut.bind(this);
+    this.boundHandleWheel = this.handleWheel.bind(this);
+    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+    this.boundHandleGlobalKeyEvent = this.handleGlobalKeyEvent.bind(this);
+    this.boundHandleGlobalVisChangeEvent =
+      this.handleGlobalVisChange.bind(this);
+    this.boundHandleFocus = this.handleFocus.bind(this);
+
     this.canvasEl.addEventListener("mousedown", this.boundHandlePressStart);
     this.canvasEl.addEventListener("mousemove", this.boundHandleMove);
     this.canvasEl.addEventListener("mouseup", this.boundHandlePressEnd);
@@ -246,6 +356,14 @@ class HTMLCanvasRenderer {
     this.canvasEl.addEventListener("touchend", this.boundHandlePressEnd);
     this.canvasEl.addEventListener("click", this.boundHandleClick);
     this.canvasEl.addEventListener("wheel", this.boundHandleWheel);
+    this.canvasEl.addEventListener("keydown", this.boundHandleKeyDown);
+    this.canvasEl.addEventListener("focus", this.boundHandleFocus);
+    window.addEventListener("keydown", this.boundHandleGlobalKeyEvent);
+    window.addEventListener("keyup", this.boundHandleGlobalKeyEvent);
+    document.addEventListener(
+      "visibilitychange",
+      this.boundHandleGlobalVisChangeEvent
+    );
   }
 
   private removeEventListeners() {
@@ -258,6 +376,14 @@ class HTMLCanvasRenderer {
     this.canvasEl.removeEventListener("touchend", this.boundHandlePressEnd);
     this.canvasEl.removeEventListener("click", this.boundHandleClick);
     this.canvasEl.removeEventListener("wheel", this.boundHandleWheel);
+    this.canvasEl.removeEventListener("keydown", this.boundHandleKeyDown);
+    this.canvasEl.removeEventListener("focus", this.boundHandleFocus);
+    window.removeEventListener("keydown", this.boundHandleGlobalKeyEvent);
+    window.removeEventListener("keyup", this.boundHandleGlobalKeyEvent);
+    document.removeEventListener(
+      "visibilitychange",
+      this.boundHandleGlobalVisChangeEvent
+    );
   }
 
   private render(timestamp: number) {
@@ -276,6 +402,7 @@ class HTMLCanvasRenderer {
   }
 
   public setActiveIndex(index: number | null) {
+    if (index !== null) this.focusedIndex = index;
     if (this.isOffscreen) {
       this.sendToWorker({ type: "activeIndexChange", index });
     } else {
@@ -303,15 +430,15 @@ const canvasRenderer = new HTMLCanvasRenderer(
 
 canvasRenderer.appendTo(app);
 
-canvasRenderer.isLoaded.subscribe((isLoaded) => {
-  console.log("The scene is loaded: ", isLoaded);
-});
+// canvasRenderer.isLoaded.subscribe((isLoaded) => {
+//   console.log("The scene is loaded: ", isLoaded);
+// });
 
-canvasRenderer.activeIndex.subscribe((index) => {
-  console.log("The active index is: ", index);
-});
+// canvasRenderer.activeIndex.subscribe((index) => {
+//   console.log("The active index is: ", index);
+// });
 
-const button = document.querySelector("button");
-button?.addEventListener("click", () => {
-  canvasRenderer.setActiveIndex(null);
-});
+// const button = document.querySelector("button");
+// button?.addEventListener("click", () => {
+//   canvasRenderer.setActiveIndex(null);
+// });
