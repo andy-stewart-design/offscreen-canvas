@@ -46,7 +46,7 @@ class CanvasAnimation {
 
   private debugConfig = {
     show: true,
-    pos: { x: 10, y: 13 },
+    offset: 12,
     fontSize: 13,
   };
 
@@ -64,71 +64,78 @@ class CanvasAnimation {
   }
 
   private drawDebugPanel(timestamp: number) {
-    // update the current framerate of the animation
-    const dTime = timestamp - this.prevTime;
-    const prevDec = (this.prevTime / 1000).toString().split(".")[1] ?? 0;
-    const currDec = (timestamp / 1000).toString().split(".")[1] ?? 0;
-    this.prevTime = timestamp;
-
-    if (currDec < prevDec) {
-      const nextFramerate = Math.floor(1000 / dTime);
-      this.framerate = nextFramerate > 0 ? nextFramerate : 0;
-    }
-
     // render debug panel
-    const { show, fontSize, pos } = this.debugConfig;
+    const { show, fontSize, offset } = this.debugConfig;
     if (show) {
+      // update the current framerate of the animation
+      const dTime = timestamp - this.prevTime;
+      const prevDec = (this.prevTime / 1000).toString().split(".")[1] ?? 0;
+      const currDec = (timestamp / 1000).toString().split(".")[1] ?? 0;
+      this.prevTime = timestamp;
+
+      if (currDec < prevDec) {
+        const nextFramerate = Math.floor(1000 / dTime);
+        this.framerate = nextFramerate > 0 ? nextFramerate : 0;
+      }
+
       this.ctx.save();
-      this.ctx.font = `300 ${fontSize}px system-ui`;
-      this.ctx.fillStyle = "rgb(0 0 0 / 0.75)";
-      this.ctx.fillRect(0, 0, 264, 204);
+      this.ctx.font = `300 ${fontSize}px monospace`;
+      this.ctx.fillStyle = "rgb(0 0 0 / 0.6)";
+      this.ctx.strokeStyle = "rgb(255 255 255 / 0.15)";
+      const vpText = `Viewport: ${this.viewport.minX.toFixed(
+        1
+      )}, ${this.viewport.minY.toFixed(1)}, ${this.viewport.maxX.toFixed(
+        1
+      )}, ${this.viewport.maxY.toFixed(1)}`;
+      const { width: w } = this.ctx.measureText(vpText);
+      this.ctx.beginPath();
+      this.ctx.roundRect(
+        offset,
+        offset,
+        w + offset + fontSize * 1.25,
+        offset + fontSize * 14,
+        8
+      );
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.closePath();
       this.ctx.fillStyle = "#efefef";
       this.ctx.textBaseline = "middle";
-      this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, pos.x, pos.y);
-      this.ctx.fillText(`Framerate: ${this.framerate}`, pos.x, pos.y * 2.5);
+
+      const posX = offset + fontSize;
+      const posY = (n = 1) => offset * 1.625 + fontSize * n;
+      this.ctx.fillText(`Offscreen: ${this.isOffscreen}`, posX, posY(1));
+      this.ctx.fillText(`Framerate: ${this.framerate}`, posX, posY(2.5));
       this.ctx.fillText(
         `Camera: ${this.camera.x.toFixed(2)}, ${this.camera.y.toFixed(2)}`,
-        pos.x,
-        pos.y * 4
+        posX,
+        posY(4)
       );
-      this.ctx.fillText(
-        `Viewport: ${this.viewport.minX.toFixed(
-          1
-        )}, ${this.viewport.minY.toFixed(1)},${this.viewport.maxX.toFixed(
-          1
-        )}, ${this.viewport.maxY.toFixed(1)}`,
-        pos.x,
-        pos.y * 5.5
-      );
+      this.ctx.fillText(vpText, posX, posY(5.5));
       this.ctx.fillText(
         `Mouse: ${this.mouse?.current.x.toFixed(
           2
         )}, ${this.mouse?.current.y.toFixed(2)}`,
-        pos.x,
-        pos.y * 7
+        posX,
+        posY(7)
       );
       this.ctx.fillText(
         `Velocity: ${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(
           2
         )}`,
-        pos.x,
-        pos.y * 8.5
+        posX,
+        posY(8.5)
       );
-      this.ctx.fillText(`Is pressed: ${this.isPressed}`, pos.x, pos.y * 10);
+      this.ctx.fillText(`Is pressed: ${this.isPressed}`, posX, posY(10));
       this.ctx.fillText(
         `Active Cell: ${this.activeIndex.value}`,
-        pos.x,
-        pos.y * 11.5
+        posX,
+        posY(11.5)
       );
       this.ctx.fillText(
         `Hovered Cell: ${this.hoveredIndex.value}`,
-        pos.x,
-        pos.y * 13
-      );
-      this.ctx.fillText(
-        `Focused Cell: ${this.focusedIndex}, ${this.isFocused}`,
-        pos.x,
-        pos.y * 14.5
+        posX,
+        posY(13)
       );
       this.ctx.restore();
     }
