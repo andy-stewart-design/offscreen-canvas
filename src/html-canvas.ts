@@ -335,9 +335,20 @@ class HTMLCanvasRenderer {
   }
 
   private handleGlobalKeyEvent(e: KeyboardEvent) {
+    console.log(e.key, e.metaKey, e.shiftKey);
     if (this.isPaused) return;
     this.globalShiftKey = e.shiftKey;
     this.globalTabKey = e.key === "Tab";
+
+    if (e.key === "d" && e.metaKey && e.shiftKey) {
+      if (this.isOffscreen) {
+        this.sendToWorker({
+          type: "debug",
+        });
+      } else {
+        this.animation?.debug();
+      }
+    }
   }
 
   private handleGlobalVisChange() {

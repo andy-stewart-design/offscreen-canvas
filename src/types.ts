@@ -93,6 +93,10 @@ interface OffscreenCanvasActiveIndexChangeEvent {
   index: number | null;
 }
 
+interface OffscreenCanvasDebugChangeEvent {
+  type: "debug";
+}
+
 type OffscreenCanvasMessage =
   | OffscreenCanvasInit
   | OffscreenCanvasMoveEvent
@@ -103,7 +107,8 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasResizeEvent
   | OffscreenCanvasImageEvent
   | OffscreenCanvasActiveIndexChangeEvent
-  | OffscreenCanvasPlaybackChangeEvent;
+  | OffscreenCanvasPlaybackChangeEvent
+  | OffscreenCanvasDebugChangeEvent;
 
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
 

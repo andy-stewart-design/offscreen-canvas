@@ -607,6 +607,10 @@ class CanvasAnimation {
   public setActiveIndex(nextIndex: number | null) {
     this.activeIndex.value = nextIndex;
   }
+
+  public debug() {
+    this.debugConfig.show = !this.debugConfig.show;
+  }
 }
 
 export default CanvasAnimation;

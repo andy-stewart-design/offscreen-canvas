@@ -79,6 +79,10 @@ class OffscreenCanvasRenderer {
     else this.play();
   }
 
+  public onDebugChange() {
+    this.animation?.debug();
+  }
+
   public resize(width: number, height: number) {
     if (!this.canvas || !this.ctx) return;
 

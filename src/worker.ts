@@ -25,5 +25,7 @@ function handleOffscreenCanvasMessage({ data }: OffscreenCanvasMessageEvent) {
     renderer.onFocus(data.isFocused, data.focusIndex);
   } else if (data.type === "playbackChange") {
     renderer.onPlaybackChange(data.paused);
+  } else if (data.type === "debug") {
+    renderer.onDebugChange();
   }
 }
