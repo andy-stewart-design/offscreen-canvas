@@ -8,10 +8,9 @@ import { createArray } from "./utils/array";
 import { isNonNullArray } from "./utils/null-check";
 import { getGridDimensions } from "./utils/grid-dimensions";
 import type { GridItem, GridItemSource, OffscreenCanvasMessage } from "./types";
-import "./main.css";
 
 class HTMLCanvasRenderer {
-  private canvasEl: HTMLCanvasElement;
+  public canvasEl: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private worker: Worker | null;
   private animation: CanvasAnimation | null;
@@ -32,7 +31,8 @@ class HTMLCanvasRenderer {
   private dpr: number;
   private rafId = 0;
 
-  public isLoaded: ObservableValue<boolean> = new ObservableValue(false);
+  private paused = new ObservableValue(false);
+  public isLoaded = new ObservableValue(false);
   public activeIndex = new ObservableValue<number | null>(null);
 
   private resizeObserver: ResizeObserver;
@@ -57,7 +57,30 @@ class HTMLCanvasRenderer {
     this.imageSources = IMAGE_SOURCES.slice(0, cols * rows);
     this.init(defaultWidth, defaultHeight);
 
+    this.resizeObserver = this.createResizeObserver();
+    this.boundHandlePressStart = this.handlePressStart.bind(this);
+    this.boundHandleMove = this.handleMove.bind(this);
+    this.boundHandlePressEnd = this.handlePressEnd.bind(this);
+    this.boundHandleClick = this.handleClick.bind(this);
+    this.boundHandleMouseOut = this.handleMouseOut.bind(this);
+    this.boundHandleWheel = this.handleWheel.bind(this);
+    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+    this.boundHandleGlobalKeyEvent = this.handleGlobalKeyEvent.bind(this);
+    this.boundHandleGlobalVisChangeEvent =
+      this.handleGlobalVisChange.bind(this);
+    this.boundHandleFocus = this.handleFocus.bind(this);
     this.addEventListeners();
+
+    this.paused.subscribe((paused) => {
+      console.log("paused changed");
+      if (paused) {
+        console.log("Pausing");
+        this.cancelRender();
+      } else {
+        console.log("Playing");
+        this.render();
+      }
+    });
 
     if (this.isOffscreen) {
       this.ctx = null;
@@ -101,8 +124,9 @@ class HTMLCanvasRenderer {
         if (next === null) this.canvasEl.style.cursor = "default";
         else this.canvasEl.style.cursor = "pointer";
       });
-      this.render(0);
     }
+
+    this.paused.value = false;
   }
 
   private init(width: number, height: number) {
@@ -140,7 +164,7 @@ class HTMLCanvasRenderer {
     this.imageSources.forEach((source, i) => {
       const image = new Image();
       image.crossOrigin = "anonymous";
-      image.src = source.src;
+      image.src = source.url;
       image.onload = async () => {
         if (this.isOffscreen) {
           const bitmap = await createImageBitmap(image);
@@ -169,6 +193,7 @@ class HTMLCanvasRenderer {
   }
 
   private handlePressStart(e: MouseEvent | TouchEvent) {
+    if (this.isPaused) return;
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
       this.sendToWorker({
@@ -187,6 +212,7 @@ class HTMLCanvasRenderer {
   }
 
   private handlePressEnd(e: MouseEvent | TouchEvent) {
+    if (this.isPaused) return;
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
       this.sendToWorker({
@@ -201,6 +227,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleClick(e: MouseEvent | TouchEvent) {
+    if (this.isPaused) return;
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
       this.sendToWorker({ type: "click", x, y });
@@ -210,6 +237,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleMove(e: MouseEvent | TouchEvent) {
+    if (this.isPaused) return;
     const { x, y } = getPressPoint(e);
     if (this.isOffscreen) {
       this.sendToWorker({ type: "mouseMove", x, y });
@@ -219,6 +247,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleMouseOut() {
+    if (this.isPaused) return;
     if (this.isOffscreen) {
       this.sendToWorker({
         type: "pressEnd",
@@ -230,6 +259,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleWheel(e: WheelEvent) {
+    if (this.isPaused) return;
     e.preventDefault();
     if (this.isOffscreen) {
       this.sendToWorker({
@@ -248,6 +278,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleKeyDown(e: KeyboardEvent) {
+    if (this.isPaused) return;
     const maxIndex = this.grid.cols * this.grid.rows - 1;
     if (e.key === "Tab") {
       if (this.globalShiftKey && this.focusedIndex > 0) {
@@ -291,6 +322,7 @@ class HTMLCanvasRenderer {
   }
 
   private handleFocus() {
+    if (this.isPaused) return;
     this.isFocused = this.canvasEl.matches(":focus-visible");
 
     if (this.globalShiftKey) {
@@ -303,17 +335,20 @@ class HTMLCanvasRenderer {
   }
 
   private handleGlobalKeyEvent(e: KeyboardEvent) {
+    if (this.isPaused) return;
     this.globalShiftKey = e.shiftKey;
     this.globalTabKey = e.key === "Tab";
   }
 
   private handleGlobalVisChange() {
+    if (this.isPaused) return;
     if (document.hidden) this.globalTabKey = false;
   }
 
   private createResizeObserver() {
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
+      this.paused.value = true;
 
       if (this.isOffscreen) {
         this.sendToWorker({
@@ -322,11 +357,11 @@ class HTMLCanvasRenderer {
           height: height,
         });
       } else {
-        cancelAnimationFrame(this.rafId);
         this.init(width, height);
         this.animation?.onResize(width, height);
-        this.render(0);
       }
+
+      this.paused.value = false;
     });
 
     observer.observe(this.canvasEl);
@@ -334,19 +369,6 @@ class HTMLCanvasRenderer {
   }
 
   private addEventListeners() {
-    this.resizeObserver = this.createResizeObserver();
-    this.boundHandlePressStart = this.handlePressStart.bind(this);
-    this.boundHandleMove = this.handleMove.bind(this);
-    this.boundHandlePressEnd = this.handlePressEnd.bind(this);
-    this.boundHandleClick = this.handleClick.bind(this);
-    this.boundHandleMouseOut = this.handleMouseOut.bind(this);
-    this.boundHandleWheel = this.handleWheel.bind(this);
-    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
-    this.boundHandleGlobalKeyEvent = this.handleGlobalKeyEvent.bind(this);
-    this.boundHandleGlobalVisChangeEvent =
-      this.handleGlobalVisChange.bind(this);
-    this.boundHandleFocus = this.handleFocus.bind(this);
-
     this.canvasEl.addEventListener("mousedown", this.boundHandlePressStart);
     this.canvasEl.addEventListener("mousemove", this.boundHandleMove);
     this.canvasEl.addEventListener("mouseup", this.boundHandlePressEnd);
@@ -386,10 +408,35 @@ class HTMLCanvasRenderer {
     );
   }
 
-  private render(timestamp: number) {
-    if (!this.animation) return;
-    this.animation.render(timestamp);
-    this.rafId = requestAnimationFrame((t) => this.render(t));
+  private render(timestamp = 0) {
+    if (!this.isOffscreen) {
+      if (!this.animation) return;
+      this.animation.render(timestamp);
+      this.rafId = requestAnimationFrame((t) => this.render(t));
+    } else {
+      this.sendToWorker({ type: "playbackChange", paused: false });
+    }
+  }
+
+  private cancelRender() {
+    if (!this.isOffscreen) {
+      cancelAnimationFrame(this.rafId);
+    } else {
+      this.sendToWorker({ type: "playbackChange", paused: true });
+    }
+  }
+
+  get isPaused() {
+    return this.paused.value;
+  }
+
+  public play() {
+    console.log("firing play");
+    this.paused.value = false;
+  }
+
+  public pause() {
+    this.paused.value = true;
   }
 
   public appendTo(node: Element) {
@@ -414,6 +461,7 @@ class HTMLCanvasRenderer {
     this.removeEventListeners();
     this.resizeObserver.unobserve(this.canvasEl);
     this.resizeObserver.disconnect();
+    this.paused.unsubscribeAll();
     this.animation?.activeIndex.unsubscribeAll();
     this.activeIndex.unsubscribeAll();
     this.isLoaded.unsubscribeAll();

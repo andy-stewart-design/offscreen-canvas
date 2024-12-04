@@ -21,7 +21,7 @@ interface Box {
 interface GridItemSource {
   type: "product" | "influencer";
   title: string;
-  src: string;
+  url: string;
 }
 
 type GridImage = ImageBitmap | HTMLImageElement;
@@ -83,7 +83,12 @@ interface OffscreenCanvasImageEvent {
   images: Array<GridItem>;
 }
 
-interface OffscreenCanvasActiveIndeChangeEvent {
+interface OffscreenCanvasPlaybackChangeEvent {
+  type: "playbackChange";
+  paused: boolean;
+}
+
+interface OffscreenCanvasActiveIndexChangeEvent {
   type: "activeIndexChange";
   index: number | null;
 }
@@ -97,7 +102,8 @@ type OffscreenCanvasMessage =
   | OffscreenCanvasFocusEvent
   | OffscreenCanvasResizeEvent
   | OffscreenCanvasImageEvent
-  | OffscreenCanvasActiveIndeChangeEvent;
+  | OffscreenCanvasActiveIndexChangeEvent
+  | OffscreenCanvasPlaybackChangeEvent;
 
 type OffscreenCanvasMessageEvent = MessageEvent<OffscreenCanvasMessage>;
 

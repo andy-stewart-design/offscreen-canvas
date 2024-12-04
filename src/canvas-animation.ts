@@ -11,11 +11,20 @@ interface StyledGridItem extends GridItem {
   scale: number;
 }
 
+const DEFAULT_BOX: Box = {
+  minX: 0,
+  minY: 0,
+  maxX: 0,
+  maxY: 0,
+  width: 0,
+  height: 0,
+};
+
 class CanvasAnimation {
   private ctx: CanvasAnimationContext;
   private camera: Vec3 = { x: 0, y: 0, z: 1 };
-  private canvas: Box;
-  private viewport: Box;
+  private canvas = DEFAULT_BOX;
+  private viewport = DEFAULT_BOX;
   private grid: { cols: number; rows: number };
   private cell = { width: 0, height: 0, outerPadding: 0, innerPadding: 0 };
   private mouse: { previous: Vec2; current: Vec2 } | null = null;
@@ -36,7 +45,7 @@ class CanvasAnimation {
   private isPressed = false;
 
   private debugConfig = {
-    show: false,
+    show: true,
     pos: { x: 10, y: 13 },
     fontSize: 13,
   };
@@ -121,7 +130,7 @@ class CanvasAnimation {
         pos.x,
         pos.y * 14.5
       );
-      this.ctx.restore;
+      this.ctx.restore();
     }
   }
 

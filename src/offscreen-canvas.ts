@@ -8,6 +8,16 @@ class OffscreenCanvasRenderer {
   private rafId = 0;
   private dpr = 1;
 
+  private play(timestamp = 0) {
+    if (!this.animation) return;
+    this.animation.render(timestamp);
+    this.rafId = requestAnimationFrame((t) => this.play(t));
+  }
+
+  private pause() {
+    cancelAnimationFrame(this.rafId);
+  }
+
   public init({ canvas, cols, rows, dpr }: OffscreenCanvasInit) {
     this.canvas = canvas;
     this.dpr = dpr;
@@ -34,8 +44,6 @@ class OffscreenCanvasRenderer {
     this.animation.hoveredIndex.subscribe((index) => {
       self.postMessage({ type: "hoveredIndex", index });
     });
-
-    this.render(0);
   }
 
   public onMouseMove(vec: Vec2) {
@@ -66,22 +74,18 @@ class OffscreenCanvasRenderer {
     this.animation?.setActiveIndex(index);
   }
 
+  public onPlaybackChange(paused: boolean) {
+    if (paused) this.pause();
+    else this.play();
+  }
+
   public resize(width: number, height: number) {
     if (!this.canvas || !this.ctx) return;
 
-    cancelAnimationFrame(this.rafId);
     this.canvas.width = width * this.dpr;
     this.canvas.height = height * this.dpr;
     this.ctx.scale(this.dpr, this.dpr);
     this.animation?.onResize(width, height);
-
-    this.render(0);
-  }
-
-  public render(timestamp: number) {
-    if (!this.animation) return;
-    this.animation.render(timestamp);
-    this.rafId = requestAnimationFrame((t) => this.render(t));
   }
 
   public destroy() {
