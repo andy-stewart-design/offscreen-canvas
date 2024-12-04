@@ -348,7 +348,8 @@ class HTMLCanvasRenderer {
   private createResizeObserver() {
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
-      this.paused.value = true;
+      const currentPaused = this.isPaused;
+      if (!currentPaused) this.pause();
 
       if (this.isOffscreen) {
         this.sendToWorker({
@@ -361,7 +362,7 @@ class HTMLCanvasRenderer {
         this.animation?.onResize(width, height);
       }
 
-      this.paused.value = false;
+      if (!currentPaused) this.play();
     });
 
     observer.observe(this.canvasEl);
@@ -446,6 +447,7 @@ class HTMLCanvasRenderer {
     const { width, height } = node.getBoundingClientRect();
     node.appendChild(this.canvasEl);
     this.animation?.onResize(width, height);
+    if (this.isPaused) this.play();
   }
 
   public setActiveIndex(index: number | null) {
